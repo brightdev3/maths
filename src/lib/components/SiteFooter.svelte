@@ -18,9 +18,10 @@
             >Devarsh</a
           > as a side project in Room 22 @ BBI.
         </p>
+        <p class="text-sm text-muted-foreground">Rebranded as Tiger Maths, improved by Deven.</p>
       </div>
       <a
-        href="https://github.com/QinCai-rui/maths"
+        href="https://github.com/brightdev3/maths"
         target="_blank"
         class="text-muted-foreground transition-colors hover:text-foreground"
         aria-label="GitHub"

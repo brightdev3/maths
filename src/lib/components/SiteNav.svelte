@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { Github, Menu, Sigma, X } from "@lucide/svelte/icons";
+  import { Github, Menu, PawPrint, X } from "@lucide/svelte/icons";
   import ThemeToggle from "$lib/components/ui/theme-toggle/theme-toggle.svelte";
 
   const links = [
@@ -19,9 +19,9 @@
     <a href="/" class="flex items-center gap-2 text-lg font-semibold tracking-tight">
       <span
         class="flex h-8 w-8 items-center justify-center border border-primary bg-primary text-primary-foreground text-base font-bold leading-none"
-        ><Sigma class="h-4 w-4" /></span
+        ><PawPrint class="h-4 w-4" /></span
       >
-      Raymont's Maths
+      Tiger Maths
     </a>
     <div class="hidden md:flex md:items-center md:gap-1">
       {#each links as link}
@@ -34,7 +34,7 @@
       {/each}
       <ThemeToggle />
       <a
-        href="https://github.com/QinCai-rui/maths"
+        href="https://github.com/brightdev3/maths"
         target="_blank"
         class="ml-1 rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         aria-label="GitHub repository"><Github class="h-5 w-5" /></a
@@ -63,7 +63,7 @@
         <div class="flex items-center gap-2 pt-2">
           <ThemeToggle />
           <a
-            href="https://github.com/QinCai-rui/maths"
+            href="https://github.com/brightdev3/maths"
             target="_blank"
             class="flex items-center gap-2 rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             ><Github class="h-5 w-5" /> GitHub</a

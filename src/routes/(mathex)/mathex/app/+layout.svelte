@@ -19,7 +19,7 @@
 </script>
 
 <svelte:head>
-  <title>Mathex - Raymont's Maths</title>
+  <title>Mathex - Tiger Maths</title>
 </svelte:head>
 <Toaster />
 <ModeWatcher defaultMode="light" />

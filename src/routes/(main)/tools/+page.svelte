@@ -16,7 +16,7 @@
       description: "A game where you guess a 5-digit number with a limited number of attempts.",
       url: "/tools/digitle",
       colour:
-        "bg-blue-500/10 text-blue-600 border-blue-200 hover:border-blue-400 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-800",
+        "bg-orange-500/10 text-orange-600 border-orange-200 hover:border-orange-400 dark:bg-orange-500/20 dark:text-orange-400 dark:border-orange-800",
       icon: Gamepad2
     },
     {

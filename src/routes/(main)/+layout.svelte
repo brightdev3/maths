@@ -5,7 +5,7 @@
   import DisclaimerDialog from "$lib/components/DisclaimerDialog.svelte";
   import { Toaster } from "$lib/components/ui/sonner";
 
-  import { Menu, X, Github, Sigma } from "@lucide/svelte/icons";
+  import { Menu, X, Github, PawPrint } from "@lucide/svelte/icons";
   import ThemeToggle from "$lib/components/ui/theme-toggle/theme-toggle.svelte";
   import { ModeWatcher } from "mode-watcher";
 
@@ -42,7 +42,7 @@
 </script>
 
 <svelte:head>
-  <title>Raymont's Maths</title>
+  <title>Tiger Maths</title>
 </svelte:head>
 
 <Toaster />
@@ -57,9 +57,9 @@
       <a href="/" class="flex items-center gap-2 text-lg font-semibold tracking-tight">
         <span
           class="flex h-8 w-8 items-center justify-center border border-primary bg-primary text-primary-foreground text-base font-bold leading-none"
-          ><Sigma class="h-4 w-4" /></span
+          ><PawPrint class="h-4 w-4" /></span
         >
-        Raymont's Maths
+        Tiger Maths
       </a>
 
       <div class="hidden md:flex md:items-center md:gap-1">
@@ -73,7 +73,7 @@
         {/each}
         <ThemeToggle />
         <a
-          href="https://github.com/QinCai-rui/maths"
+          href="https://github.com/brightdev3/maths"
           target="_blank"
           class="ml-1 rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
           aria-label="GitHub repository"
@@ -110,7 +110,7 @@
           <div class="flex items-center gap-2 pt-2">
             <ThemeToggle />
             <a
-              href="https://github.com/QinCai-rui/maths"
+              href="https://github.com/brightdev3/maths"
               target="_blank"
               class="flex items-center gap-2 rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
@@ -140,10 +140,13 @@
               >Devarsh</a
             > as a side project in Room 22 @ BBI.
           </p>
+          <p class="text-sm text-muted-foreground">Improved by 
+          <a href="https://devenwei.me" class="font-medium underline-offset-4 hover:underline">Deven</a
+            > as Tiger Maths.</p>
         </div>
         <div class="flex items-center gap-4">
           <a
-            href="https://github.com/QinCai-rui/maths"
+            href="https://github.com/brightdev3/maths"
             target="_blank"
             class="text-muted-foreground transition-colors hover:text-foreground"
             aria-label="GitHub"

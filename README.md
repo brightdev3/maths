@@ -1,6 +1,6 @@
-# Raymont's Maths
+# Tiger Maths
 
-This is a website that contains resources about maths. It uses Bun and SvelteKit. You can try it at [https://maths.qincai.xyz](https://maths.qincai.xyz) or [https://maths.raymont.dev](https://maths.raymont.dev).
+This is a website that contains resources about maths. It uses Bun and SvelteKit.
 
 ## How to develop
 
@@ -20,7 +20,7 @@ Every push to the repository triggers the `.github/workflows/docker-publish.yml`
 workflow, which builds the image and publishes it to GHCR:
 
 ```nolang
-ghcr.io/qincai-rui/maths:{branch}-{sha}
+ghcr.io/brightdev3/maths:{branch}-{sha}
 ```
 
 On the default branch (`main`) it also publishes `latest` and `{branch}` tags.
@@ -28,5 +28,5 @@ On the default branch (`main`) it also publishes `latest` and `{branch}` tags.
 To run a published image:
 
 ```bash
-docker run -p 5185:5185 ghcr.io/qincai-rui/maths:latest
+docker run -p 5185:5185 ghcr.io/brightdev3/maths:latest
 ```

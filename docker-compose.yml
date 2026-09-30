@@ -1,7 +1,7 @@
 services:
   maths:
     # use `docker compose up` to pull/use prebuilt image
-    image: ghcr.io/qincai-rui/maths:latest
+    image: ghcr.io/brightdev3/maths:latest
 
     # use `GIT_COMMIT="$(git rev-parse --short=7 HEAD)" docker compose up --build`
     # to include git hash on local builds
