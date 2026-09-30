@@ -179,6 +179,22 @@
     skipConfirmOpen = true;
   }
 
+  function submitAnswer() {
+    const submittedAnswer = currentQuestion.requireAllSolutionGroups ? answers : answer;
+    if (
+      (Array.isArray(submittedAnswer) && submittedAnswer.some((value) => value === null || value === "")) ||
+      submittedAnswer === null ||
+      submittedAnswer === ""
+    ) {
+      toast.error("Enter an answer first");
+      return;
+    }
+    socket.emit(
+      "answer",
+      Array.isArray(submittedAnswer) ? (submittedAnswer as (string | number)[]) : submittedAnswer
+    );
+  }
+
   function executeSkip() {
     skipConfirmOpen = false;
     socket.emit("skip");
@@ -317,59 +333,49 @@
           <div class="question-content prose prose-slate max-w-none dark:prose-invert">
             {@html renderMath(currentQuestion.content)}
           </div>
-          <div class="mt-6">
-            {#if currentQuestion.requireAllSolutionGroups}
-              <div class="grid gap-4">
-                {#each currentQuestion.answerGroups as answerGroup, index}
-                  <div class="grid gap-1.5">
-                    <Label>Answer {index + 1}</Label>
-                    {#if answerGroup.length === 1 && answerGroup[0] === "number"}
-                      <NumberAnswer bind:answer={answers[index]} />
-                    {:else if answerGroup.length === 1 && answerGroup[0] === "text"}
-                      <TextAnswer bind:answer={answers[index]} />
-                    {:else}
-                      <ExpressionAnswer bind:answer={answers[index]} />
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-            {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "number"}
-              <NumberAnswer bind:answer />
-            {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "text"}
-              <TextAnswer bind:answer />
-            {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "expression"}
-              <ExpressionAnswer bind:answer />
-            {:else}
-              <ExpressionAnswer bind:answer />
-            {/if}
-          </div>
           <form
-            class="mt-4"
+            class="mt-6"
             onsubmit={(e) => {
               e.preventDefault();
-              const submittedAnswer = currentQuestion.requireAllSolutionGroups ? answers : answer;
-              if (
-                (Array.isArray(submittedAnswer) && submittedAnswer.some((value) => value === null || value === "")) ||
-                submittedAnswer === null ||
-                submittedAnswer === ""
-              ) {
-                toast.error("Enter an answer first");
-                return;
-              }
-              socket.emit(
-                "answer",
-                Array.isArray(submittedAnswer) ? (submittedAnswer as (string | number)[]) : submittedAnswer
-              );
+              submitAnswer();
             }}
           >
-            <Button
-              type="submit"
-              class="w-full shadow-lg shadow-primary/20"
-              size="lg"
-              disabled={currentQuestion.requireAllSolutionGroups
-                ? answers.some((value) => value === null || value === "")
-                : answer === null || answer === ""}>Lock in answer</Button
-            >
+            <div>
+              {#if currentQuestion.requireAllSolutionGroups}
+                <div class="grid gap-4">
+                  {#each currentQuestion.answerGroups as answerGroup, index}
+                    <div class="grid gap-1.5">
+                      <Label>Answer {index + 1}</Label>
+                      {#if answerGroup.length === 1 && answerGroup[0] === "number"}
+                        <NumberAnswer bind:answer={answers[index]} />
+                      {:else if answerGroup.length === 1 && answerGroup[0] === "text"}
+                        <TextAnswer bind:answer={answers[index]} />
+                      {:else}
+                        <ExpressionAnswer bind:answer={answers[index]} />
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "number"}
+                <NumberAnswer bind:answer />
+              {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "text"}
+                <TextAnswer bind:answer />
+              {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "expression"}
+                <ExpressionAnswer bind:answer />
+              {:else}
+                <ExpressionAnswer bind:answer />
+              {/if}
+            </div>
+            <div class="mt-4">
+              <Button
+                type="submit"
+                class="w-full shadow-lg shadow-primary/20"
+                size="lg"
+                disabled={currentQuestion.requireAllSolutionGroups
+                  ? answers.some((value) => value === null || value === "")
+                  : answer === null || answer === ""}>Lock in answer</Button
+              >
+            </div>
           </form>
           {#if currentQuestion.skippable}
             <Button variant="outline" class="mt-2 w-full gap-2" size="lg" onclick={confirmSkip}>
