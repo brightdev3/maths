@@ -54,7 +54,7 @@
   let playing = $state(false);
   let result = $state<"correct" | "wrong" | null>(null);
   let interval: ReturnType<typeof setInterval> | undefined;
-  let answerInput: HTMLInputElement | undefined;
+  let answerInput: HTMLInputElement | undefined = $state();
 
   const stop = () => {
     playing = false;

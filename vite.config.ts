@@ -31,8 +31,5 @@ export default defineConfig({
   define: {
     __BUILD_COMMIT__: JSON.stringify(buildCommit),
     __BUILD_TIME__: JSON.stringify(buildTime)
-  },
-  server: {
-    hmr: false
   }
 });
