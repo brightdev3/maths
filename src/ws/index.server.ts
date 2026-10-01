@@ -45,7 +45,14 @@ export const createWSServer = (base: ServerInstance) => {
   const io = new Server(base, {
     serveClient: false,
     // Question images are embedded as data URLs in the portable question set.
-    maxHttpBufferSize: envInteger("MATHEX_MAX_HTTP_BUFFER_BYTES", 10 * 1024 * 1024, 1_048_576, 52_428_800)
+    maxHttpBufferSize: envInteger("MATHEX_MAX_HTTP_BUFFER_BYTES", 10 * 1024 * 1024, 1_048_576, 52_428_800),
+    // This server shares its HTTP server with other WebSocket users (notably
+    // Vite's HMR channel in dev). Engine.io would otherwise `socket.end()`
+    // any foreign upgrade after `destroyUpgradeTimeout` (default 1s) whenever
+    // it thinks the socket is idle — a check based on `bytesWritten` that is
+    // unreliable under Bun, so the HMR socket was killed ~1s after every
+    // connect and the Vite client full-reloaded the page in a loop.
+    destroyUpgrade: false
   });
   registerPhysicalCompetitionServer(io);
   registerSetShareServer(io);
