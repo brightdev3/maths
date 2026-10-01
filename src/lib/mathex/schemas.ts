@@ -51,6 +51,7 @@ export interface RoomSocketData {
   awaySince: number | null;
   visibilityFlags: number;
   skips: number;
+  correctCount: number;
 }
 
 export type LogVerbosity = "all" | "submissions" | "finished";

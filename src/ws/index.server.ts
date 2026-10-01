@@ -133,6 +133,9 @@ export const createWSServer = (base: ServerInstance) => {
         player.finishingTime = null;
         player.isRunning = false;
         player.runningUntil = null;
+        player.skips = 0;
+        player.correctCount = 0;
+        player.awaySince = null;
       }
       for (const playerSocket of await roomNamespace.fetchSockets()) {
         if (!playerSocket.data.name) continue;
@@ -196,7 +199,8 @@ export const createWSServer = (base: ServerInstance) => {
       runningUntil: null,
       awaySince: null,
       visibilityFlags: 0,
-      skips: 0
+      skips: 0,
+      correctCount: 0
     };
     socket.on("join", async (name, playerId) => {
       const playerName = name.trim();
@@ -280,6 +284,7 @@ export const createWSServer = (base: ServerInstance) => {
         setTimeout(() => {
           if (isCorrect) {
             socket.emit("alert", "success", "Correct!");
+            socket.data.correctCount = (socket.data.correctCount ?? 0) + 1;
             const correctLog: LogEntry = {
               timestamp: Date.now(),
               playerName: socket.data.name || "Unknown",

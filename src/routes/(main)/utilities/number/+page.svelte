@@ -6,7 +6,8 @@
   import { Hash } from "@lucide/svelte/icons";
 
   let query = $state("");
-  async function submit() {
+  async function submit(e?: SubmitEvent) {
+    e?.preventDefault();
     if (isNaN(Number(query))) return;
     requestAnimationFrame(() => goto(`/utilities/number/${query}`));
   }
