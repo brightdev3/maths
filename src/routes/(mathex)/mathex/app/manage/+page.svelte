@@ -94,7 +94,6 @@
   const initialHostSettings = readHostSettings();
 
   let verbosity: LogVerbosity = $state("all");
-  let showLogs = $state(true);
   let logsOpen = $state(false);
   let settingsOpen = $state(false);
   // Scores are always visible; this only toggles the x5 multiplier. On by default.
@@ -131,7 +130,6 @@
   });
 
   let filteredLogs = $derived.by(() => {
-    if (!showLogs) return [];
     if (verbosity === "all") return logs;
     if (verbosity === "submissions")
       return logs.filter((l) => l.type === "submitted" || l.type === "correct" || l.type === "wrong" || l.type === "skipped");
@@ -406,15 +404,9 @@
 {/snippet}
 
 {#snippet logsPanel(uid: string)}
-  <div class="flex items-center justify-between">
-    <Header size="h2">Logs ({filteredLogs.length})</Header>
-    <div class="flex items-center gap-2">
-      <Checkbox id="showLogs-{uid}" bind:checked={showLogs} />
-      <Label for="showLogs-{uid}" class="cursor-pointer text-sm">Show</Label>
-    </div>
-  </div>
+  <Header size="h2">Logs ({filteredLogs.length})</Header>
   <div class="mt-3">
-    <Select.Root type="single" bind:value={verbosity} disabled={!showLogs}>
+    <Select.Root type="single" bind:value={verbosity}>
       <Select.Trigger class="w-full">
         {verbosity === "all" ? "All activity" : verbosity === "submissions" ? "Answers" : "Results & tabs"}
       </Select.Trigger>
@@ -425,13 +417,11 @@
       </Select.Content>
     </Select.Root>
   </div>
-  {#if showLogs}
-    <div
-      class="mt-3 max-h-72 overflow-y-auto rounded-lg border border-border/40 bg-muted/20 p-2 font-mono text-xs scrollbar-thin"
-    >
-      {@render logList()}
-    </div>
-  {/if}
+  <div
+    class="mt-3 max-h-72 overflow-y-auto rounded-lg border border-border/40 bg-muted/20 p-2 font-mono text-xs scrollbar-thin"
+  >
+    {@render logList()}
+  </div>
 {/snippet}
 
 {#snippet extrasStack(uid: string)}
