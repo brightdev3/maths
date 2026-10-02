@@ -52,6 +52,7 @@
   let allowLateJoin = $state(true);
   let allowShowLeaderboard = $state(true);
   let allowCalculator = $state(true);
+  let allowSketch = $state(true);
   let allowChat = $state(false);
   let chatDialogOpen = $state(false);
   let chatDontShowAgain = $state(false);
@@ -163,6 +164,7 @@
         allowLateJoin,
         showLeaderboard: allowShowLeaderboard,
         allowCalculator,
+        allowSketch,
         allowChat
       };
       socket.emit("newRoom", roomNameResult.data, set, runningTime * 1000, visibilityTracking, settings);
@@ -461,6 +463,17 @@
                             <Label for="allow-chat" class="cursor-pointer text-sm font-semibold">Player chat</Label>
                             <p class="mt-1 text-xs leading-5 text-muted-foreground">
                               Players can message each other during the game.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                        <div class="flex items-start gap-2.5">
+                          <Checkbox id="allow-sketch" bind:checked={allowSketch} />
+                          <div>
+                            <Label for="allow-sketch" class="cursor-pointer text-sm font-semibold">Sketch pad</Label>
+                            <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                              Full-screen drawing canvas for working things out.
                             </p>
                           </div>
                         </div>

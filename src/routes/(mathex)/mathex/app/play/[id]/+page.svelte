@@ -36,7 +36,9 @@
   import CalculatorIcon from "@lucide/svelte/icons/calculator";
   import MessageCircle from "@lucide/svelte/icons/message-circle";
   import Send from "@lucide/svelte/icons/send";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import Calculator from "$lib/mathex/Calculator.svelte";
+  import SketchPad from "$lib/mathex/SketchPad.svelte";
 
   import { Confetti } from "svelte-confetti";
   let confetti = $state(false);
@@ -201,11 +203,13 @@
   // Right-hand panel during play: standings or chat.
   let sidePanel: "leaderboard" | "chat" | null = $state(null);
   let calcOpen = $state(false);
+  let sketchOpen = $state(false);
   // Close tools the host disables.
   $effect(() => {
     if (roomSettings && !roomSettings.showLeaderboard && sidePanel === "leaderboard") sidePanel = null;
     if (roomSettings && !roomSettings.allowCalculator && calcOpen) calcOpen = false;
     if (roomSettings && !roomSettings.allowChat && sidePanel === "chat") sidePanel = null;
+    if (roomSettings && !roomSettings.allowSketch && sketchOpen) sketchOpen = false;
   });
 
   let chatMessages: ChatMessage[] = $state([]);
@@ -426,7 +430,7 @@
         </div>
       </header>
 
-      {#if roomSettings?.showLeaderboard !== false || roomSettings?.allowCalculator !== false || roomSettings?.allowChat === true}
+      {#if roomSettings?.showLeaderboard !== false || roomSettings?.allowCalculator !== false || roomSettings?.allowChat === true || roomSettings?.allowSketch !== false}
         <div class="mt-3 flex flex-wrap gap-2">
           {#if roomSettings?.showLeaderboard !== false}
           <Button
@@ -464,6 +468,16 @@
               aria-pressed={calcOpen}
             >
               <CalculatorIcon class="h-4 w-4" /> Calculator
+            </Button>
+          {/if}
+          {#if roomSettings?.allowSketch !== false}
+            <Button
+              variant={sketchOpen ? "default" : "outline"}
+              size="sm"
+              onclick={() => (sketchOpen = !sketchOpen)}
+              aria-pressed={sketchOpen}
+            >
+              <Pencil class="h-4 w-4" /> Sketch
             </Button>
           {/if}
         </div>
@@ -632,6 +646,9 @@
     </div>
     {#if calcOpen && roomSettings?.allowCalculator !== false}
       <Calculator onclose={() => (calcOpen = false)} />
+    {/if}
+    {#if sketchOpen && roomSettings?.allowSketch !== false}
+      <SketchPad onclose={() => (sketchOpen = false)} />
     {/if}
   {:else if gameState === "finished"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
