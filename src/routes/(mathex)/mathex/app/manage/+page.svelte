@@ -71,11 +71,43 @@
     logs = [...logs, entry];
   });
 
+  const HOST_SETTINGS_KEY = "mathex-host-settings";
+  type HostSettings = {
+    scoreTimesFive?: boolean;
+    view?: "list" | "tiles";
+    showExtras?: boolean;
+    animations?: boolean;
+  };
+  function readHostSettings(): HostSettings {
+    try {
+      if (typeof localStorage === "undefined") return {};
+      const raw = localStorage.getItem(HOST_SETTINGS_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return typeof parsed === "object" && parsed !== null ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  const initialHostSettings = readHostSettings();
+
   let verbosity: LogVerbosity = $state("all");
   let showLogs = $state(true);
   let logsOpen = $state(false);
   let settingsOpen = $state(false);
-  let showScore = $state(false);
+  // Scores are always visible; this only toggles the x5 multiplier. On by default.
+  let scoreTimesFive: boolean = $state(initialHostSettings.scoreTimesFive ?? true);
+
+  $effect(() => {
+    try {
+      const raw = localStorage.getItem(HOST_SETTINGS_KEY);
+      const current: HostSettings = raw ? (JSON.parse(raw) as HostSettings) : {};
+      current.scoreTimesFive = scoreTimesFive;
+      localStorage.setItem(HOST_SETTINGS_KEY, JSON.stringify(current));
+    } catch {
+      // Storage unavailable (e.g. private mode): keep settings in memory only.
+    }
+  });
 
   let filteredLogs = $derived.by(() => {
     if (!showLogs) return [];
@@ -103,13 +135,38 @@
     return correctByName.get(player.name ?? "") ?? 0;
   }
 
+  function displayScoreOf(player: RoomSocketData): number {
+    const correct = correctOf(player);
+    return scoreTimesFive ? correct * 5 : correct;
+  }
+
+  // Primary rank: score, then elapsed time.
+  let sortedPlayers = $derived.by(() => {
+    void tick;
+    const elapsedOf = (p: RoomSocketData) =>
+      p.startingTime ? (p.finishingTime ?? Date.now()) - p.startingTime : Number.POSITIVE_INFINITY;
+    return [...players].sort((a, b) => {
+      const byScore = correctOf(b) - correctOf(a);
+      if (byScore !== 0) return byScore;
+      const byTime = elapsedOf(a) - elapsedOf(b);
+      if (byTime !== 0 && Number.isFinite(byTime)) return byTime;
+      if (b.currentQuestion !== a.currentQuestion) return b.currentQuestion - a.currentQuestion;
+      return (a.name ?? "").localeCompare(b.name ?? "");
+    });
+  });
+
   function onQuestion(player: RoomSocketData): number {
     if (totalQuestions > 0) return Math.min(Math.max(player.currentQuestion, 1), totalQuestions);
     return player.currentQuestion;
   }
 
+  function leaderboardCorrect(entry: LeaderboardEntry): number {
+    return Math.max(0, entry.questionsCompleted - entry.skips);
+  }
+
   function leaderboardScore(entry: LeaderboardEntry): number {
-    return Math.max(0, entry.questionsCompleted - entry.skips) * 5;
+    const correct = leaderboardCorrect(entry);
+    return scoreTimesFive ? correct * 5 : correct;
   }
 
   let leaderboard: LeaderboardEntry[] = $state([]);
@@ -251,8 +308,8 @@
                   <div class="absolute right-0 z-30 mt-2 w-64 rounded-xl border border-border bg-card p-4 shadow-xl">
                     <p class="text-sm font-bold">Display settings</p>
                     <div class="mt-3 flex items-center gap-2">
-                      <Checkbox id="showScore" bind:checked={showScore} />
-                      <Label for="showScore" class="cursor-pointer text-sm">Show score (correct × 5)</Label>
+                      <Checkbox id="scoreTimesFive" bind:checked={scoreTimesFive} />
+                      <Label for="scoreTimesFive" class="cursor-pointer text-sm">Multiply score by 5</Label>
                     </div>
                   </div>
                 {/if}
@@ -263,15 +320,11 @@
             </div>
           </div>
           <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {#each players as player, i (player.name)}
-              {@const progress =
-                totalQuestions > 0
-                  ? ((player.finishingTime ? player.currentQuestion : player.currentQuestion - 1) / totalQuestions) *
-                    100
-                  : 0}
+            {#each sortedPlayers as player, i (player.playerId ?? player.name)}
+              {@const correct = correctOf(player)}
+              {@const scoreProgress = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0}
               {@const elapsed =
                 tick >= 0 && player.startingTime ? (player.finishingTime || Date.now()) - player.startingTime : null}
-              {@const correct = correctOf(player)}
               <div
                 class="flex flex-col gap-2 rounded-xl border-2 border-solid p-3 transition-colors {player.startingTime
                   ? player.finishingTime
@@ -302,9 +355,9 @@
                     <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                       {#if currentState === "started" || currentState === "finished"}
                         <span class="font-semibold text-foreground">Q{onQuestion(player)}/{totalQuestions}</span>
-                        <span aria-label="{player.name} has {correct} correct answers"
-                          >{correct} correct{#if showScore} · {correct * 5} pts{/if}</span
-                        >
+                        {#if scoreTimesFive}
+                          <span>{correct} correct</span>
+                        {/if}
                       {/if}
                       {#if player.visibilityFlags > 0}
                         <span
@@ -316,10 +369,18 @@
                       {/if}
                     </div>
                   </div>
+                  {#if currentState === "started" || currentState === "finished"}
+                    <div class="shrink-0 text-right" aria-label="{player.name} score {displayScoreOf(player)}">
+                      <div class="text-2xl font-black tabular-nums leading-none">{displayScoreOf(player)}</div>
+                      <div class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
+                        {scoreTimesFive ? "pts" : "correct"}
+                      </div>
+                    </div>
+                  {/if}
                 </div>
                 {#if currentState === "started" || currentState === "finished"}
                   <div class="flex items-center gap-2">
-                    <Progress value={progress} class="h-2 flex-1" />
+                    <Progress value={scoreProgress} class="h-2 flex-1" />
                   </div>
                 {/if}
               </div>
@@ -445,10 +506,15 @@
                         {entry.visibilityFlags}
                       </span>
                     {/if}
-                    <span class="shrink-0 text-xs text-muted-foreground">
-                      {entry.totalMs !== null ? msToMinutesAndSeconds(entry.totalMs) : "DNF"} &middot; {entry.questionsCompleted}/{entry.totalQuestions}{#if showScore}
-                        &middot; {leaderboardScore(entry)} pts{/if}
-                    </span>
+                    <div class="shrink-0 text-right">
+                      <span class="text-lg font-black tabular-nums">{leaderboardScore(entry)}</span>
+                      <span class="ml-1 text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground"
+                        >{scoreTimesFive ? "pts" : "correct"}</span
+                      >
+                      <div class="text-xs text-muted-foreground">
+                        {entry.totalMs !== null ? msToMinutesAndSeconds(entry.totalMs) : "DNF"} &middot; {entry.questionsCompleted}/{entry.totalQuestions}
+                      </div>
+                    </div>
                   </div>
                 {/each}
               </div>
