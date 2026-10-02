@@ -6,13 +6,14 @@ export const RoomName = z
   .min(3, "The room name has to be at least 3 characters long")
   .max(60, "The room name cannot be greater than 60 characters long");
 
-export type State = "connecting" | "choose-name" | "waiting_start" | "started" | "finished";
+export type State = "connecting" | "choose-name" | "waiting_start" | "started" | "finished" | "kicked";
 
 export interface RoomServerToClientEvents {
   alert: (type: ToastT["type"], message: string) => void;
   lobby: () => void;
   gameStart: (startingTime: number) => void;
   gameFinish: () => void;
+  kicked: () => void;
   running: (durationMs: number) => void;
   answerResult: (correct: boolean) => void;
   stopRunning: () => void;
@@ -59,7 +60,7 @@ export type LogVerbosity = "all" | "submissions" | "finished";
 export interface LogEntry {
   timestamp: number;
   playerName: string;
-  type: "submitted" | "running" | "correct" | "wrong" | "finished" | "visibility" | "skipped";
+  type: "submitted" | "running" | "correct" | "wrong" | "finished" | "visibility" | "skipped" | "kicked";
   questionNumber: number;
   detail?: string;
 }
@@ -96,6 +97,7 @@ export interface RoomManageClientToServerEvents {
   start: () => void;
   finish: () => void;
   alertAll: (type: ToastT["type"], message: string) => void;
+  kick: (playerId: string) => void;
 }
 
 export interface RoomManageServerToClientEvents {

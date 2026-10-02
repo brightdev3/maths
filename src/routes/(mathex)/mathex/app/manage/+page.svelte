@@ -24,6 +24,7 @@
   import Copy from "@lucide/svelte/icons/copy";
   import Radio from "@lucide/svelte/icons/radio";
   import UsersRound from "@lucide/svelte/icons/users-round";
+  import UserX from "@lucide/svelte/icons/user-x";
   import Settings from "@lucide/svelte/icons/settings";
   import ScrollText from "@lucide/svelte/icons/scroll-text";
   import X from "@lucide/svelte/icons/x";
@@ -191,6 +192,23 @@
   let leaderboard: LeaderboardEntry[] = $state([]);
   socket.on("leaderboard", (data) => (leaderboard = data));
 
+  // Two-click confirm for kicking a player.
+  let kickArmed: string | null = $state(null);
+  let kickArmTimer: ReturnType<typeof setTimeout> | null = null;
+  function askKick(playerId: string | null) {
+    if (!playerId) return;
+    if (kickArmed === playerId) {
+      if (kickArmTimer) clearTimeout(kickArmTimer);
+      kickArmed = null;
+      socket.emit("kick", playerId);
+      toast.success("Player kicked");
+    } else {
+      if (kickArmTimer) clearTimeout(kickArmTimer);
+      kickArmed = playerId;
+      kickArmTimer = setTimeout(() => (kickArmed = null), 4000);
+    }
+  }
+
   let exportFormat: "json" | "csv" = $state("json");
 
   let tick = $state(0);
@@ -264,6 +282,8 @@
           Q{log.questionNumber} wrong{verbosity === "all" ? ` (${log.detail})` : ""}
         {:else if log.type === "skipped"}
           skipped Q{log.questionNumber}
+        {:else if log.type === "kicked"}
+          was kicked from the game
         {:else if log.type === "finished"}
           finished all questions
         {:else if log.type === "visibility"}
@@ -434,6 +454,25 @@
   </div>
 {/snippet}
 
+{#snippet kickButton(player: RoomSocketData)}
+  {@const key = player.playerId ?? player.name ?? ""}
+  {#if key}
+    <button
+      type="button"
+      onclick={() => askKick(player.playerId)}
+      title={kickArmed === key ? "Click again to confirm kick" : "Kick player"}
+      aria-label={kickArmed === key ? `Confirm kick ${player.name}` : `Kick ${player.name}`}
+      class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors {kickArmed ===
+      key
+        ? 'bg-destructive text-destructive-foreground'
+        : 'text-muted-foreground hover:bg-destructive/10 hover:text-destructive'}"
+    >
+      <UserX class="h-3.5 w-3.5" />
+      {#if kickArmed === key}<span>Kick?</span>{/if}
+    </button>
+  {/if}
+{/snippet}
+
 {#snippet playerListPanel(uid: string)}
   <div class="mathex-panel min-w-0 rounded-2xl p-5 sm:p-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -498,6 +537,7 @@
                   {player.visibilityFlags}
                 </span>
               {/if}
+              {@render kickButton(player)}
             </div>
             {#if currentState === "started" || currentState === "finished"}
               <div class="mt-1.5 flex items-center gap-2">
@@ -679,6 +719,7 @@
                           {player.visibilityFlags}
                         </span>
                       {/if}
+                      {@render kickButton(player)}
                     </div>
                   </div>
                   {#if currentState === "started" || currentState === "finished"}
