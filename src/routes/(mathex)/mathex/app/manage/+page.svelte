@@ -75,6 +75,8 @@
   let timerMinutes = $state(5);
   let chatDialogOpen = $state(false);
   let chatDontShowAgain = $state(false);
+  let chatKey = $state(0);
+  let chatConfirmed = false;
 
   function requestChatToggle(on: boolean) {
     if (!on) {
@@ -86,13 +88,22 @@
       return;
     }
     chatDontShowAgain = false;
+    chatConfirmed = false;
     chatDialogOpen = true;
   }
 
   function confirmChatDialog() {
     if (chatDontShowAgain) dismissChatDisclaimer();
+    chatConfirmed = true;
     socket.emit("updateSettings", { allowChat: true });
     chatDialogOpen = false;
+  }
+
+  function onChatDialogOpenChange(open: boolean) {
+    // The checkbox flips visually on click; if the dialog was dismissed
+    // without confirming, remount it so it reflects the real (off) value.
+    if (!open && !chatConfirmed) chatKey++;
+    chatConfirmed = false;
   }
   let endsInMs = $derived.by(() => {
     void tick;
@@ -564,11 +575,13 @@
               <Label for="allowCalculator-{uid}" class="cursor-pointer text-sm">Calculator</Label>
             </div>
             <div class="flex items-center gap-2">
-              <Checkbox
-                id="allowChat-{uid}"
-                checked={roomSettings.allowChat}
-                onCheckedChange={(checked) => requestChatToggle(checked === true)}
-              />
+              {#key chatKey}
+                <Checkbox
+                  id="allowChat-{uid}"
+                  checked={roomSettings.allowChat}
+                  onCheckedChange={(checked) => requestChatToggle(checked === true)}
+                />
+              {/key}
               <Label for="allowChat-{uid}" class="cursor-pointer text-sm">Player chat</Label>
             </div>
             <div class="flex items-center gap-2">
@@ -707,7 +720,7 @@
 {/snippet}
 
 <div class="mathex-shell min-h-screen p-4 sm:p-6">
-  <AlertDialog.Root bind:open={chatDialogOpen}>
+  <AlertDialog.Root bind:open={chatDialogOpen} onOpenChange={onChatDialogOpenChange}>
     <AlertDialog.Content>
       <AlertDialog.Header>
         <AlertDialog.Title>Enable player chat?</AlertDialog.Title>
