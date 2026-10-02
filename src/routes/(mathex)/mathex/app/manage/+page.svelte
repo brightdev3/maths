@@ -528,6 +528,14 @@
               />
               <Label for="showLeaderboard-{uid}" class="cursor-pointer text-sm">Live leaderboard</Label>
             </div>
+            <div class="flex items-center gap-2">
+              <Checkbox
+                id="allowCalculator-{uid}"
+                checked={roomSettings.allowCalculator}
+                onCheckedChange={(checked) => socket.emit("updateSettings", { allowCalculator: checked === true })}
+              />
+              <Label for="allowCalculator-{uid}" class="cursor-pointer text-sm">Calculator</Label>
+            </div>
           </div>
         </div>
       </div>

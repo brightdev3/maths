@@ -45,6 +45,7 @@
   let endOnPerfectScore = $state(false);
   let allowLateJoin = $state(true);
   let allowShowLeaderboard = $state(true);
+  let allowCalculator = $state(true);
 
   function parseQuestions(value: unknown) {
     const source = value && typeof value === "object" && "questions" in value ? value.questions : value;
@@ -132,7 +133,8 @@
         gameTimerMs: gameTimerMinutes > 0 ? Math.round(gameTimerMinutes * 60000) : null,
         endOnPerfectScore,
         allowLateJoin,
-        showLeaderboard: allowShowLeaderboard
+        showLeaderboard: allowShowLeaderboard,
+        allowCalculator
       };
       socket.emit("newRoom", roomNameResult.data, set, runningTime * 1000, visibilityTracking, settings);
       socket.once("goto", (path) => {
@@ -385,6 +387,19 @@
                             >
                             <p class="mt-1 text-xs leading-5 text-muted-foreground">
                               Players can open standings next to the question.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                        <div class="flex items-start gap-2.5">
+                          <Checkbox id="allow-calculator" bind:checked={allowCalculator} />
+                          <div>
+                            <Label for="allow-calculator" class="cursor-pointer text-sm font-semibold"
+                              >Calculator</Label
+                            >
+                            <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                              Floating scientific calculator for players.
                             </p>
                           </div>
                         </div>

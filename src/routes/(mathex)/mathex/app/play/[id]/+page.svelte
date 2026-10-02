@@ -32,6 +32,8 @@
   import CircleMinus from "@lucide/svelte/icons/circle-minus";
   import UserX from "@lucide/svelte/icons/user-x";
   import Trophy from "@lucide/svelte/icons/trophy";
+  import CalculatorIcon from "@lucide/svelte/icons/calculator";
+  import Calculator from "$lib/mathex/Calculator.svelte";
 
   import { Confetti } from "svelte-confetti";
   let confetti = $state(false);
@@ -195,9 +197,11 @@
 
   // Right-hand panel during play. Chat joins this slot in a later step.
   let sidePanel: "leaderboard" | null = $state(null);
-  // Close panels the host disables.
+  let calcOpen = $state(false);
+  // Close tools the host disables.
   $effect(() => {
     if (roomSettings && !roomSettings.showLeaderboard && sidePanel === "leaderboard") sidePanel = null;
+    if (roomSettings && !roomSettings.allowCalculator && calcOpen) calcOpen = false;
   });
 
   // Keep the player's own row visible in a long leaderboard.
@@ -395,8 +399,9 @@
         </div>
       </header>
 
-      {#if roomSettings?.showLeaderboard !== false}
+      {#if roomSettings?.showLeaderboard !== false || roomSettings?.allowCalculator !== false}
         <div class="mt-3 flex flex-wrap gap-2">
+          {#if roomSettings?.showLeaderboard !== false}
           <Button
             variant={sidePanel === "leaderboard" ? "default" : "outline"}
             size="sm"
@@ -405,6 +410,17 @@
           >
             <Trophy class="h-4 w-4" /> {sidePanel === "leaderboard" ? "Hide standings" : "Standings"}
           </Button>
+          {/if}
+          {#if roomSettings?.allowCalculator !== false}
+            <Button
+              variant={calcOpen ? "default" : "outline"}
+              size="sm"
+              onclick={() => (calcOpen = !calcOpen)}
+              aria-pressed={calcOpen}
+            >
+              <CalculatorIcon class="h-4 w-4" /> Calculator
+            </Button>
+          {/if}
         </div>
       {/if}
 
@@ -532,6 +548,9 @@
         {/if}
       </div>
     </div>
+    {#if calcOpen && roomSettings?.allowCalculator !== false}
+      <Calculator onclose={() => (calcOpen = false)} />
+    {/if}
   {:else if gameState === "finished"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
       <div class="mathex-panel w-full max-w-md rounded-3xl p-7 text-center sm:p-9">
