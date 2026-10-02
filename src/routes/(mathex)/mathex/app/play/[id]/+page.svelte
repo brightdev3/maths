@@ -28,6 +28,7 @@
   import Flag from "@lucide/svelte/icons/flag";
   import Timer from "@lucide/svelte/icons/timer";
   import CircleMinus from "@lucide/svelte/icons/circle-minus";
+  import UserX from "@lucide/svelte/icons/user-x";
 
   import { Confetti } from "svelte-confetti";
   let confetti = $state(false);
@@ -39,6 +40,7 @@
   const sessionKey = `mathex-player-${roomId}`;
 
   let gameState: State = $state("connecting");
+  let kicked = $state(false);
 
   let name: string = $state("");
   let playerId = "";
@@ -72,7 +74,9 @@
     toast.success("Connected!");
   });
   socket.on("connect_error", () => toast.error("Failed to connect! Does this room exist?"));
-  socket.on("disconnect", () => toast.warning("Disconnected!"));
+  socket.on("disconnect", () => {
+    if (!kicked) toast.warning("Disconnected!");
+  });
 
   $effect(() => {
     const reportVisibility = () => socket.emit("visibilityChange", document.hidden);
@@ -120,6 +124,14 @@
   });
   socket.on("gameFinish", () => {
     gameState = "finished";
+  });
+  socket.on("kicked", () => {
+    kicked = true;
+    gameState = "kicked";
+    try {
+      localStorage.removeItem(sessionKey);
+    } catch {}
+    toast.error("You were kicked by the host");
   });
   socket.on("confetti", () => {
     confetti = true;
@@ -171,6 +183,7 @@
       return;
     }
     name = trimmedName;
+    kicked = false;
     playerId = createId();
     socket.emit("join", name, playerId);
   }
@@ -438,6 +451,31 @@
         <p class="mt-4 text-muted-foreground">
           The host may communicate more information to you via alerts. They will appear at the bottom right.
         </p>
+      </div>
+    </div>
+  {:else if gameState === "kicked"}
+    <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
+      <div class="mathex-panel w-full max-w-md rounded-3xl p-7 text-center sm:p-9">
+        <div
+          class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"
+        >
+          <UserX class="h-7 w-7" />
+        </div>
+        <p class="mathex-kicker mt-5 text-destructive">Removed by host</p>
+        <Header size="h1" class="mt-2 text-4xl tracking-[-0.04em]">You were kicked.</Header>
+        <p class="mt-4 text-muted-foreground">
+          The host removed you from this competition. You can rejoin with a new name if they allow it.
+        </p>
+        <Button
+          class="mt-6 w-full"
+          size="lg"
+          onclick={() => {
+            kicked = false;
+            name = "";
+            playerId = "";
+            gameState = "choose-name";
+          }}>Join again</Button
+        >
       </div>
     </div>
   {/if}

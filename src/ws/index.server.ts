@@ -179,6 +179,30 @@ export const createWSServer = (base: ServerInstance) => {
       roomManageNamespace.emit("playerData", getPlayers(room));
       roomManageNamespace.emit("leaderboard", lb);
     });
+    socket.on("kick", async (playerId) => {
+      const target = room.players.get(playerId);
+      if (!target) return;
+      room.players.delete(playerId);
+      saveRoom(room);
+      const kickLog: LogEntry = {
+        timestamp: Date.now(),
+        playerName: target.name || "Unknown",
+        type: "kicked",
+        questionNumber: target.currentQuestion
+      };
+      room.logs.push(kickLog);
+      saveRoom(room);
+      roomManageNamespace.emit("log", kickLog);
+      roomManageNamespace.emit("playerData", getPlayers(room));
+      if (room.state === "finished") roomManageNamespace.emit("leaderboard", buildLeaderboard(room));
+      for (const playerSocket of await roomNamespace.fetchSockets()) {
+        if (playerSocket.data.playerId === playerId) {
+          playerSocket.emit("kicked");
+          // Give the client a beat to receive the event before dropping the socket.
+          setTimeout(() => playerSocket.disconnect(true), 800);
+        }
+      }
+    });
   });
 
   const roomNamespaces = io.of(/^\/room\-\d{6}$/) as Namespace<
