@@ -20,6 +20,12 @@
   import { Progress } from "$lib/components/ui/progress";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import * as Select from "$lib/components/ui/select";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import {
+    CHAT_DISCLAIMER,
+    dismissChatDisclaimer,
+    hasDismissedChatDisclaimer
+  } from "$lib/mathex/chat-disclaimer";
   import Identicon from "$lib/components/Identicon.svelte";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import Copy from "@lucide/svelte/icons/copy";
@@ -67,6 +73,27 @@
   let endsAt: number | null = $state(null);
   socket.on("gameEndsAt", (deadline) => (endsAt = deadline));
   let timerMinutes = $state(5);
+  let chatDialogOpen = $state(false);
+  let chatDontShowAgain = $state(false);
+
+  function requestChatToggle(on: boolean) {
+    if (!on) {
+      socket.emit("updateSettings", { allowChat: false });
+      return;
+    }
+    if (hasDismissedChatDisclaimer()) {
+      socket.emit("updateSettings", { allowChat: true });
+      return;
+    }
+    chatDontShowAgain = false;
+    chatDialogOpen = true;
+  }
+
+  function confirmChatDialog() {
+    if (chatDontShowAgain) dismissChatDisclaimer();
+    socket.emit("updateSettings", { allowChat: true });
+    chatDialogOpen = false;
+  }
   let endsInMs = $derived.by(() => {
     void tick;
     return endsAt ? Math.max(0, endsAt - Date.now()) : null;
@@ -536,6 +563,14 @@
               />
               <Label for="allowCalculator-{uid}" class="cursor-pointer text-sm">Calculator</Label>
             </div>
+            <div class="flex items-center gap-2">
+              <Checkbox
+                id="allowChat-{uid}"
+                checked={roomSettings.allowChat}
+                onCheckedChange={(checked) => requestChatToggle(checked === true)}
+              />
+              <Label for="allowChat-{uid}" class="cursor-pointer text-sm">Player chat</Label>
+            </div>
           </div>
         </div>
       </div>
@@ -664,6 +699,22 @@
 {/snippet}
 
 <div class="mathex-shell min-h-screen p-4 sm:p-6">
+  <AlertDialog.Root bind:open={chatDialogOpen}>
+    <AlertDialog.Content>
+      <AlertDialog.Header>
+        <AlertDialog.Title>Enable player chat?</AlertDialog.Title>
+        <AlertDialog.Description>{CHAT_DISCLAIMER}</AlertDialog.Description>
+      </AlertDialog.Header>
+      <div class="flex items-center gap-2">
+        <Checkbox id="chat-disclaimer-manage" bind:checked={chatDontShowAgain} />
+        <Label for="chat-disclaimer-manage" class="cursor-pointer text-sm">Don't show this again</Label>
+      </div>
+      <AlertDialog.Footer>
+        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+        <AlertDialog.Action onclick={confirmChatDialog}>I understand</AlertDialog.Action>
+      </AlertDialog.Footer>
+    </AlertDialog.Content>
+  </AlertDialog.Root>
   <main class="mx-auto flex w-full max-w-7xl flex-col gap-4">
     <header class="flex flex-col justify-between gap-4 py-2 sm:flex-row sm:items-end">
       <div>

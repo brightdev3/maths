@@ -4,7 +4,13 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Checkbox } from "$lib/components/ui/checkbox";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { toast } from "svelte-sonner";
+  import {
+    CHAT_DISCLAIMER,
+    dismissChatDisclaimer,
+    hasDismissedChatDisclaimer
+  } from "$lib/mathex/chat-disclaimer";
 
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Clock3 from "@lucide/svelte/icons/clock-3";
@@ -46,6 +52,28 @@
   let allowLateJoin = $state(true);
   let allowShowLeaderboard = $state(true);
   let allowCalculator = $state(true);
+  let allowChat = $state(false);
+  let chatDialogOpen = $state(false);
+  let chatDontShowAgain = $state(false);
+
+  function requestChatToggle(on: boolean) {
+    if (!on) {
+      allowChat = false;
+      return;
+    }
+    if (hasDismissedChatDisclaimer()) {
+      allowChat = true;
+      return;
+    }
+    chatDontShowAgain = false;
+    chatDialogOpen = true;
+  }
+
+  function confirmChatDialog() {
+    if (chatDontShowAgain) dismissChatDisclaimer();
+    allowChat = true;
+    chatDialogOpen = false;
+  }
 
   function parseQuestions(value: unknown) {
     const source = value && typeof value === "object" && "questions" in value ? value.questions : value;
@@ -134,7 +162,8 @@
         endOnPerfectScore,
         allowLateJoin,
         showLeaderboard: allowShowLeaderboard,
-        allowCalculator
+        allowCalculator,
+        allowChat
       };
       socket.emit("newRoom", roomNameResult.data, set, runningTime * 1000, visibilityTracking, settings);
       socket.once("goto", (path) => {
@@ -147,6 +176,23 @@
     }
   }
 </script>
+
+<AlertDialog.Root bind:open={chatDialogOpen}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Enable player chat?</AlertDialog.Title>
+      <AlertDialog.Description>{CHAT_DISCLAIMER}</AlertDialog.Description>
+    </AlertDialog.Header>
+    <div class="flex items-center gap-2">
+      <Checkbox id="chat-disclaimer-setup" bind:checked={chatDontShowAgain} />
+      <Label for="chat-disclaimer-setup" class="cursor-pointer text-sm">Don't show this again</Label>
+    </div>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+      <AlertDialog.Action onclick={confirmChatDialog}>I understand</AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
 
 <div
   class="mathex-shell min-h-full px-4 py-5 sm:px-8 sm:py-8"
@@ -400,6 +446,21 @@
                             >
                             <p class="mt-1 text-xs leading-5 text-muted-foreground">
                               Floating scientific calculator for players.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                        <div class="flex items-start gap-2.5">
+                          <Checkbox
+                            id="allow-chat"
+                            checked={allowChat}
+                            onCheckedChange={(checked) => requestChatToggle(checked === true)}
+                          />
+                          <div>
+                            <Label for="allow-chat" class="cursor-pointer text-sm font-semibold">Player chat</Label>
+                            <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                              Players can message each other during the game.
                             </p>
                           </div>
                         </div>
