@@ -571,6 +571,14 @@
               />
               <Label for="allowChat-{uid}" class="cursor-pointer text-sm">Player chat</Label>
             </div>
+            <div class="flex items-center gap-2">
+              <Checkbox
+                id="allowSketch-{uid}"
+                checked={roomSettings.allowSketch}
+                onCheckedChange={(checked) => socket.emit("updateSettings", { allowSketch: checked === true })}
+              />
+              <Label for="allowSketch-{uid}" class="cursor-pointer text-sm">Sketch pad</Label>
+            </div>
           </div>
         </div>
       </div>
