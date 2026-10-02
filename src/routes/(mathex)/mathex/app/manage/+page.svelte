@@ -33,6 +33,7 @@
 
   import { toast } from "svelte-sonner";
   import { copyText, msToMinutesAndSeconds } from "$lib/utils";
+  import { fade, slide } from "svelte/transition";
 
   const socket: Socket<RoomManageServerToClientEvents, RoomManageClientToServerEvents> = io(`/manage-${roomId}`, {
     query: {
@@ -97,16 +98,29 @@
   let settingsOpen = $state(false);
   // Scores are always visible; this only toggles the x5 multiplier. On by default.
   let scoreTimesFive: boolean = $state(initialHostSettings.scoreTimesFive ?? true);
+  // List is the classic side-by-side view and the default; tiles focus on player cards.
+  let viewMode: "list" | "tiles" = $state(initialHostSettings.view ?? "list");
+  // Hides the controls/logs/results column so hosts can focus on players alone.
+  let showExtras: boolean = $state(initialHostSettings.showExtras ?? true);
+  // Small-screen tab for the list view (players vs everything else).
+  let mobileTab: "players" | "extras" = $state("players");
 
   $effect(() => {
     try {
       const raw = localStorage.getItem(HOST_SETTINGS_KEY);
       const current: HostSettings = raw ? (JSON.parse(raw) as HostSettings) : {};
       current.scoreTimesFive = scoreTimesFive;
+      current.view = viewMode;
+      current.showExtras = showExtras;
       localStorage.setItem(HOST_SETTINGS_KEY, JSON.stringify(current));
     } catch {
       // Storage unavailable (e.g. private mode): keep settings in memory only.
     }
+  });
+
+  // Keep the small-screen tab on players when extras are hidden.
+  $effect(() => {
+    if (!showExtras && mobileTab === "extras") mobileTab = "players";
   });
 
   let filteredLogs = $derived.by(() => {
@@ -259,6 +273,252 @@
   {/each}
 {/snippet}
 
+{#snippet settingsPanel(uid: string)}
+  <div class="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-border bg-card p-4 shadow-xl">
+    <p class="text-sm font-bold">Display settings</p>
+    <p class="mt-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">View</p>
+    <div
+      class="mt-1.5 grid grid-cols-2 gap-1 rounded-lg border border-border/60 bg-muted/40 p-1"
+      role="group"
+      aria-label="Layout view"
+    >
+      <Button variant={viewMode === "list" ? "default" : "ghost"} size="sm" onclick={() => (viewMode = "list")}
+        >List</Button
+      >
+      <Button variant={viewMode === "tiles" ? "default" : "ghost"} size="sm" onclick={() => (viewMode = "tiles")}
+        >Tiles</Button
+      >
+    </div>
+    <div class="mt-3 flex items-center gap-2">
+      <Checkbox id="showExtras-{uid}" bind:checked={showExtras} />
+      <Label for="showExtras-{uid}" class="cursor-pointer text-sm">Show controls & results</Label>
+    </div>
+    <div class="mt-2.5 flex items-center gap-2">
+      <Checkbox id="scoreTimesFive-{uid}" bind:checked={scoreTimesFive} />
+      <Label for="scoreTimesFive-{uid}" class="cursor-pointer text-sm">Multiply score by 5</Label>
+    </div>
+  </div>
+{/snippet}
+
+{#snippet alertsPanel()}
+  <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+    <Header size="h2">Alerts</Header>
+    <form
+      class="mt-4 flex w-full flex-col gap-3 sm:flex-row"
+      onsubmit={(e) => {
+        e.preventDefault();
+        if (alertType === undefined) {
+          toast.error("Choose an alert type!");
+          return;
+        }
+        if (!alertText) {
+          toast.error("Write some alert text!");
+          return;
+        }
+        socket.emit("alertAll", alertType, alertText);
+        alertText = "";
+      }}
+    >
+      <Select.Root type="single" bind:value={alertType}>
+        <Select.Trigger class="w-full sm:w-[180px]">
+          {alertType ? alertType.charAt(0).toUpperCase() + alertType.substring(1).toLowerCase() : "Alert Type"}
+        </Select.Trigger>
+        <Select.Content>
+          {#each alertTypes as type}
+            <Select.Item value={type}>{type.charAt(0).toUpperCase() + type.substring(1).toLowerCase()}</Select.Item>
+          {/each}
+        </Select.Content>
+      </Select.Root>
+      <Input bind:value={alertText} class="flex-1" placeholder="Alert Text" />
+      <Button type="submit">Send</Button>
+    </form>
+  </div>
+{/snippet}
+
+{#snippet leaderboardPanel()}
+  {#if currentState === "finished" && leaderboard.length > 0}
+    <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+      <div class="flex items-center justify-between">
+        <Header size="h2">Leaderboard</Header>
+        <div class="flex items-center gap-2">
+          <Select.Root type="single" bind:value={exportFormat}>
+            <Select.Trigger class="w-[80px]">
+              {exportFormat.toUpperCase()}
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="json">JSON</Select.Item>
+              <Select.Item value="csv">CSV</Select.Item>
+            </Select.Content>
+          </Select.Root>
+          <Button variant="outline" size="sm" onclick={exportScores}>Export</Button>
+        </div>
+      </div>
+      <div class="mt-4 flex max-h-64 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
+        {#each leaderboard as entry}
+          <div class="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 p-2.5">
+            <div
+              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold {entry.rank ===
+              1
+                ? 'bg-yellow-400 text-yellow-900'
+                : entry.rank === 2
+                  ? 'bg-gray-300 text-gray-700'
+                  : entry.rank === 3
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-muted text-muted-foreground'}"
+            >
+              {entry.rank}
+            </div>
+            <Identicon className="w-8 h-8 shrink-0" seed={entry.name} />
+            <div class="min-w-0 flex-1">
+              <span class="truncate text-sm font-medium">{entry.name}</span>
+            </div>
+            {#if entry.visibilityFlags > 0}
+              <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                <TriangleAlert class="h-3.5 w-3.5" />
+                {entry.visibilityFlags}
+              </span>
+            {/if}
+            <div class="shrink-0 text-right">
+              <span class="text-lg font-black tabular-nums">{leaderboardScore(entry)}</span>
+              <span class="ml-1 text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground"
+                >{scoreTimesFive ? "pts" : "correct"}</span
+              >
+              <div class="text-xs text-muted-foreground">
+                {entry.totalMs !== null ? msToMinutesAndSeconds(entry.totalMs) : "DNF"} &middot; {entry.questionsCompleted}/{entry.totalQuestions}
+              </div>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet logsPanel(uid: string)}
+  <div class="flex items-center justify-between">
+    <Header size="h2">Logs ({filteredLogs.length})</Header>
+    <div class="flex items-center gap-2">
+      <Checkbox id="showLogs-{uid}" bind:checked={showLogs} />
+      <Label for="showLogs-{uid}" class="cursor-pointer text-sm">Show</Label>
+    </div>
+  </div>
+  <div class="mt-3">
+    <Select.Root type="single" bind:value={verbosity} disabled={!showLogs}>
+      <Select.Trigger class="w-full">
+        {verbosity === "all" ? "All activity" : verbosity === "submissions" ? "Answers" : "Results & tabs"}
+      </Select.Trigger>
+      <Select.Content>
+        <Select.Item value="all">All activity</Select.Item>
+        <Select.Item value="submissions">Answers only</Select.Item>
+        <Select.Item value="finished">Results & tab activity</Select.Item>
+      </Select.Content>
+    </Select.Root>
+  </div>
+  {#if showLogs}
+    <div
+      class="mt-3 max-h-72 overflow-y-auto rounded-lg border border-border/40 bg-muted/20 p-2 font-mono text-xs scrollbar-thin"
+    >
+      {@render logList()}
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet extrasStack(uid: string)}
+  <div class="flex min-w-0 flex-col gap-4">
+    {@render alertsPanel()}
+    {@render leaderboardPanel()}
+    <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+      {@render logsPanel(uid)}
+    </div>
+  </div>
+{/snippet}
+
+{#snippet playerListPanel(uid: string)}
+  <div class="mathex-panel min-w-0 rounded-2xl p-5 sm:p-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <Header size="h2" class="text-2xl">Players</Header><span
+          class="flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary"
+          ><UsersRound class="h-3.5 w-3.5" />{players.length} joined</span
+        >
+      </div>
+      <div class="relative">
+        <Button variant="outline" size="sm" onclick={() => (settingsOpen = !settingsOpen)} aria-label="Display settings">
+          <Settings class="h-4 w-4" /> Settings
+        </Button>
+        {#if settingsOpen}
+          {@render settingsPanel(uid)}
+        {/if}
+      </div>
+    </div>
+    <div class="mt-4 flex max-h-[55vh] flex-col gap-2 overflow-y-auto scrollbar-thin lg:max-h-[32rem]">
+      {#each sortedPlayers as player, i (player.playerId ?? player.name)}
+        {@const correct = correctOf(player)}
+        {@const scoreProgress = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0}
+        {@const elapsed =
+          tick >= 0 && player.startingTime ? (player.finishingTime || Date.now()) - player.startingTime : null}
+        <div
+          class="flex items-center gap-3 rounded-lg border-2 border-solid p-3 transition-colors {player.startingTime
+            ? player.finishingTime
+              ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
+              : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
+            : 'bg-muted/50 border-border'}"
+        >
+          <div
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold {player.finishingTime
+              ? 'bg-emerald-500 text-white'
+              : player.startingTime
+                ? 'bg-red-500 text-white'
+                : 'bg-muted text-muted-foreground'}"
+          >
+            {i + 1}
+          </div>
+          <Identicon className="w-10 h-10 shrink-0" seed={player.name || "Choosing..."} />
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-2">
+              <span class="truncate text-sm font-bold">{player.name || "Choosing..."}</span>
+              {#if elapsed !== null}
+                <span class="shrink-0 text-xs tabular-nums text-muted-foreground"
+                  >{msToMinutesAndSeconds(elapsed)}</span
+                >
+              {/if}
+            </div>
+            <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+              {#if currentState === "started" || currentState === "finished"}
+                <span class="font-semibold text-foreground">Q{onQuestion(player)}/{totalQuestions}</span>
+                {#if scoreTimesFive}
+                  <span>{correct} correct</span>
+                {/if}
+              {/if}
+              {#if player.visibilityFlags > 0}
+                <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                  <TriangleAlert class="h-3.5 w-3.5" />
+                  {player.visibilityFlags}
+                </span>
+              {/if}
+            </div>
+            {#if currentState === "started" || currentState === "finished"}
+              <div class="mt-1.5 flex items-center gap-2">
+                <Progress value={scoreProgress} class="h-2 flex-1" />
+              </div>
+            {/if}
+          </div>
+          {#if currentState === "started" || currentState === "finished"}
+            <div class="shrink-0 text-right" aria-label="{player.name} score {displayScoreOf(player)}">
+              <div class="text-2xl font-black tabular-nums leading-none">{displayScoreOf(player)}</div>
+              <div class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
+                {scoreTimesFive ? "pts" : "correct"}
+              </div>
+            </div>
+          {/if}
+        </div>
+      {:else}
+        <p class="italic text-sm text-muted-foreground">No players yet</p>
+      {/each}
+    </div>
+  </div>
+{/snippet}
+
 <div class="mathex-shell min-h-screen p-4 sm:p-6">
   <main class="mx-auto flex w-full max-w-7xl flex-col gap-4">
     <header class="flex flex-col justify-between gap-4 py-2 sm:flex-row sm:items-end">
@@ -289,7 +549,60 @@
       </div>
     </div>
 
-    <div class="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+    {#key viewMode}
+      <div in:fade={{ duration: 150 }}>
+        {#if viewMode === "list"}
+          {#if showExtras}
+            <div
+              class="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-border bg-card p-1 lg:hidden"
+              role="tablist"
+              aria-label="Host panels"
+            >
+              <Button
+                variant={mobileTab === "players" ? "default" : "ghost"}
+                size="sm"
+                onclick={() => (mobileTab = "players")}
+                role="tab"
+                aria-selected={mobileTab === "players"}>Players</Button
+              >
+              <Button
+                variant={mobileTab === "extras" ? "default" : "ghost"}
+                size="sm"
+                onclick={() => (mobileTab = "extras")}
+                role="tab"
+                aria-selected={mobileTab === "extras"}>Controls & logs</Button
+              >
+            </div>
+          {/if}
+          <div class="lg:hidden">
+            {#key mobileTab}
+              <div in:fade={{ duration: 150 }}>
+                {#if mobileTab === "players" || !showExtras}
+                  {@render playerListPanel("list-mobile")}
+                {:else}
+                  {@render extrasStack("list-mobile")}
+                {/if}
+              </div>
+            {/key}
+          </div>
+          <div
+            class="hidden items-start gap-4 transition-all duration-300 lg:grid {showExtras
+              ? 'lg:grid-cols-2'
+              : 'lg:grid-cols-1'}"
+          >
+            {@render playerListPanel("list-desktop")}
+            {#if showExtras}
+              <div transition:slide={{ duration: 200 }}>
+                {@render extrasStack("list-desktop")}
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <div
+            class="grid items-start gap-4 transition-all duration-300 {showExtras
+              ? '2xl:grid-cols-[minmax(0,1fr)_360px]'
+              : ''}"
+          >
       <div class="flex min-w-0 flex-col gap-4">
         <div class="mathex-panel rounded-2xl p-5 sm:p-6">
           <div class="flex flex-wrap items-center justify-between gap-3">
@@ -305,18 +618,14 @@
                   <Settings class="h-4 w-4" /> Settings
                 </Button>
                 {#if settingsOpen}
-                  <div class="absolute right-0 z-30 mt-2 w-64 rounded-xl border border-border bg-card p-4 shadow-xl">
-                    <p class="text-sm font-bold">Display settings</p>
-                    <div class="mt-3 flex items-center gap-2">
-                      <Checkbox id="scoreTimesFive" bind:checked={scoreTimesFive} />
-                      <Label for="scoreTimesFive" class="cursor-pointer text-sm">Multiply score by 5</Label>
-                    </div>
-                  </div>
+                  {@render settingsPanel("tiles")}
                 {/if}
               </div>
-              <Button variant="outline" size="sm" class="2xl:hidden" onclick={() => (logsOpen = !logsOpen)}>
-                <ScrollText class="h-4 w-4" /> {logsOpen ? "Hide logs" : "Show logs"} ({filteredLogs.length})
-              </Button>
+              {#if showExtras}
+                <Button variant="outline" size="sm" class="2xl:hidden" onclick={() => (logsOpen = !logsOpen)}>
+                  <ScrollText class="h-4 w-4" /> {logsOpen ? "Hide logs" : "Show logs"} ({filteredLogs.length})
+                </Button>
+              {/if}
             </div>
           </div>
           <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -390,168 +699,36 @@
           </div>
         </div>
 
-        {#if logsOpen}
-          <div class="mathex-panel rounded-2xl p-5 sm:p-6 2xl:hidden">
-            <div class="flex items-center justify-between">
-              <Header size="h2">Logs ({filteredLogs.length})</Header>
-              <div class="flex items-center gap-2">
-                <div class="flex items-center gap-2">
-                  <Checkbox id="showLogsMobile" bind:checked={showLogs} />
-                  <Label for="showLogsMobile" class="cursor-pointer text-sm">Show</Label>
-                </div>
-                <Button variant="outline" size="sm" onclick={() => (logsOpen = false)} aria-label="Hide logs">
-                  <X class="h-4 w-4" />
-                </Button>
-              </div>
+        {#if showExtras && logsOpen}
+          <div class="mathex-panel rounded-2xl p-5 sm:p-6 2xl:hidden" transition:slide={{ duration: 200 }}>
+            <div class="flex items-center justify-end">
+              <Button variant="outline" size="sm" onclick={() => (logsOpen = false)} aria-label="Hide logs">
+                <X class="h-4 w-4" />
+              </Button>
             </div>
-            <div class="mt-3">
-              <Select.Root type="single" bind:value={verbosity} disabled={!showLogs}>
-                <Select.Trigger class="w-[160px]">
-                  {verbosity === "all" ? "All activity" : verbosity === "submissions" ? "Answers" : "Results & tabs"}
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="all">All activity</Select.Item>
-                  <Select.Item value="submissions">Answers only</Select.Item>
-                  <Select.Item value="finished">Results & tab activity</Select.Item>
-                </Select.Content>
-              </Select.Root>
+            <div class="mt-2">
+              {@render logsPanel("tiles-mobile")}
             </div>
-            {#if showLogs}
-              <div
-                class="mt-3 max-h-72 overflow-y-auto rounded-lg border border-border/40 bg-muted/20 p-2 font-mono text-xs scrollbar-thin"
-              >
-                {@render logList()}
-              </div>
-            {/if}
           </div>
         {/if}
 
-        <div class="grid items-start gap-4 xl:grid-cols-2">
-          <div class="mathex-panel rounded-2xl p-5 sm:p-6">
-            <Header size="h2">Alerts</Header>
-            <form
-              class="mt-4 flex w-full flex-col gap-3 sm:flex-row"
-              onsubmit={(e) => {
-                e.preventDefault();
-                if (alertType === undefined) {
-                  toast.error("Choose an alert type!");
-                  return;
-                }
-                if (!alertText) {
-                  toast.error("Write some alert text!");
-                  return;
-                }
-                socket.emit("alertAll", alertType, alertText);
-                alertText = "";
-              }}
-            >
-              <Select.Root type="single" bind:value={alertType}>
-                <Select.Trigger class="w-full sm:w-[180px]">
-                  {alertType ? alertType.charAt(0).toUpperCase() + alertType.substring(1).toLowerCase() : "Alert Type"}
-                </Select.Trigger>
-                <Select.Content>
-                  {#each alertTypes as type}
-                    <Select.Item value={type}
-                      >{type.charAt(0).toUpperCase() + type.substring(1).toLowerCase()}</Select.Item
-                    >
-                  {/each}
-                </Select.Content>
-              </Select.Root>
-              <Input bind:value={alertText} class="flex-1" placeholder="Alert Text" />
-              <Button type="submit">Send</Button>
-            </form>
-          </div>
-
-          {#if currentState === "finished" && leaderboard.length > 0}
-            <div class="mathex-panel rounded-2xl p-5 sm:p-6">
-              <div class="flex items-center justify-between">
-                <Header size="h2">Leaderboard</Header>
-                <div class="flex items-center gap-2">
-                  <Select.Root type="single" bind:value={exportFormat}>
-                    <Select.Trigger class="w-[80px]">
-                      {exportFormat.toUpperCase()}
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Item value="json">JSON</Select.Item>
-                      <Select.Item value="csv">CSV</Select.Item>
-                    </Select.Content>
-                  </Select.Root>
-                  <Button variant="outline" size="sm" onclick={exportScores}>Export</Button>
-                </div>
-              </div>
-              <div class="mt-4 flex max-h-64 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
-                {#each leaderboard as entry}
-                  <div class="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 p-2.5">
-                    <div
-                      class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold {entry.rank ===
-                      1
-                        ? 'bg-yellow-400 text-yellow-900'
-                        : entry.rank === 2
-                          ? 'bg-gray-300 text-gray-700'
-                          : entry.rank === 3
-                            ? 'bg-amber-600 text-white'
-                            : 'bg-muted text-muted-foreground'}"
-                    >
-                      {entry.rank}
-                    </div>
-                    <Identicon className="w-8 h-8 shrink-0" seed={entry.name} />
-                    <div class="min-w-0 flex-1">
-                      <span class="truncate text-sm font-medium">{entry.name}</span>
-                    </div>
-                    {#if entry.visibilityFlags > 0}
-                      <span
-                        class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"
-                      >
-                        <TriangleAlert class="h-3.5 w-3.5" />
-                        {entry.visibilityFlags}
-                      </span>
-                    {/if}
-                    <div class="shrink-0 text-right">
-                      <span class="text-lg font-black tabular-nums">{leaderboardScore(entry)}</span>
-                      <span class="ml-1 text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground"
-                        >{scoreTimesFive ? "pts" : "correct"}</span
-                      >
-                      <div class="text-xs text-muted-foreground">
-                        {entry.totalMs !== null ? msToMinutesAndSeconds(entry.totalMs) : "DNF"} &middot; {entry.questionsCompleted}/{entry.totalQuestions}
-                      </div>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <div class="mathex-panel hidden rounded-2xl p-5 sm:p-6 2xl:block">
-        <div class="flex items-center justify-between">
-          <Header size="h2">Logs ({filteredLogs.length})</Header>
-          <div class="flex items-center gap-2">
-            <Checkbox id="showLogs" bind:checked={showLogs} />
-            <Label for="showLogs" class="cursor-pointer text-sm">Show</Label>
-          </div>
-        </div>
-        <div class="mt-3">
-          <Select.Root type="single" bind:value={verbosity} disabled={!showLogs}>
-            <Select.Trigger class="w-full">
-              {verbosity === "all" ? "All activity" : verbosity === "submissions" ? "Answers" : "Results & tabs"}
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="all">All activity</Select.Item>
-              <Select.Item value="submissions">Answers only</Select.Item>
-              <Select.Item value="finished">Results & tab activity</Select.Item>
-            </Select.Content>
-          </Select.Root>
-        </div>
-        {#if showLogs}
-          <div
-            class="mt-3 max-h-[60vh] overflow-y-auto rounded-lg border border-border/40 bg-muted/20 p-2 font-mono text-xs scrollbar-thin"
-          >
-            {@render logList()}
+        {#if showExtras}
+          <div class="grid items-start gap-4 xl:grid-cols-2" transition:slide={{ duration: 200 }}>
+            {@render alertsPanel()}
+            {@render leaderboardPanel()}
           </div>
         {/if}
       </div>
-    </div>
+
+      {#if showExtras}
+        <div class="mathex-panel hidden rounded-2xl p-5 sm:p-6 2xl:block" transition:fade={{ duration: 200 }}>
+          {@render logsPanel("tiles-desktop")}
+        </div>
+      {/if}
+          </div>
+        {/if}
+      </div>
+    {/key}
 
     {#if currentState !== "finished"}
       <Button
