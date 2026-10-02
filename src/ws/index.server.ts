@@ -446,7 +446,14 @@ export const createWSServer = (base: ServerInstance) => {
 
   function getPlayers(room: Room) {
     const data = [...room.players.values()];
+    const elapsedOf = (d: RoomSocketData) =>
+      d.startingTime ? (d.finishingTime ?? Date.now()) - d.startingTime : Number.POSITIVE_INFINITY;
     data.sort((a, b) => {
+      // Scores are what the host watches, so rank by correct answers first, then time.
+      const byScore = (b.correctCount ?? 0) - (a.correctCount ?? 0);
+      if (byScore !== 0) return byScore;
+      const byTime = elapsedOf(a) - elapsedOf(b);
+      if (byTime !== 0 && Number.isFinite(byTime)) return byTime;
       if (!a.startingTime && !b.startingTime) return 0;
       if (!a.startingTime) return 1;
       if (!b.startingTime) return -1;
@@ -474,6 +481,10 @@ export const createWSServer = (base: ServerInstance) => {
       });
     }
     entries.sort((a, b) => {
+      // Scores first, then fastest time.
+      const correctA = Math.max(0, a.questionsCompleted - a.skips);
+      const correctB = Math.max(0, b.questionsCompleted - b.skips);
+      if (correctB !== correctA) return correctB - correctA;
       if (a.totalMs !== null && b.totalMs !== null) return a.totalMs - b.totalMs;
       if (a.totalMs !== null) return -1;
       if (b.totalMs !== null) return 1;
