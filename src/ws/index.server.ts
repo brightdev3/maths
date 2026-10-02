@@ -294,6 +294,10 @@ export const createWSServer = (base: ServerInstance) => {
       if (existingPlayer) {
         socket.data = existingPlayer;
       } else {
+        if (room.state !== "lobby" && !room.settings.allowLateJoin) {
+          socket.emit("joinDenied", "Late joining is disabled for this game.");
+          return;
+        }
         const duplicateName = [...room.players.values()].some(
           (player) => player.name?.toLowerCase() === playerName.toLowerCase()
         );

@@ -135,6 +135,10 @@
     } catch {}
     toast.error("You were kicked by the host");
   });
+  socket.on("joinDenied", (reason) => {
+    gameState = "choose-name";
+    toast.error(reason);
+  });
   socket.on("confetti", () => {
     confetti = true;
     setTimeout(() => (confetti = false), 6000);

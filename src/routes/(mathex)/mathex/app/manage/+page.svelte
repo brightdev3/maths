@@ -506,6 +506,17 @@
             </p>
           </div>
         </div>
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Access</p>
+          <div class="mt-2 flex items-center gap-2">
+            <Checkbox
+              id="allowLateJoin-{uid}"
+              checked={roomSettings.allowLateJoin}
+              onCheckedChange={(checked) => socket.emit("updateSettings", { allowLateJoin: checked === true })}
+            />
+            <Label for="allowLateJoin-{uid}" class="cursor-pointer text-sm">Allow late joining</Label>
+          </div>
+        </div>
       </div>
     {:else}
       <p class="mt-3 text-sm text-muted-foreground">Loading game options…</p>
