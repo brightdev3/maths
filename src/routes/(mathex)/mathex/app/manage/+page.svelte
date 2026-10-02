@@ -34,6 +34,7 @@
   import { toast } from "svelte-sonner";
   import { copyText, msToMinutesAndSeconds } from "$lib/utils";
   import { fade, slide } from "svelte/transition";
+  import { flip } from "svelte/animate";
 
   const socket: Socket<RoomManageServerToClientEvents, RoomManageClientToServerEvents> = io(`/manage-${roomId}`, {
     query: {
@@ -102,6 +103,11 @@
   let viewMode: "list" | "tiles" = $state(initialHostSettings.view ?? "list");
   // Hides the controls/logs/results column so hosts can focus on players alone.
   let showExtras: boolean = $state(initialHostSettings.showExtras ?? true);
+  // Master switch for view/tab/panel transitions and position animations.
+  let animations: boolean = $state(initialHostSettings.animations ?? true);
+  let fadeParams = $derived({ duration: animations ? 150 : 0 });
+  let slideParams = $derived({ duration: animations ? 200 : 0 });
+  let flipParams = $derived({ duration: animations ? 250 : 0 });
   // Small-screen tab for the list view (players vs everything else).
   let mobileTab: "players" | "extras" = $state("players");
 
@@ -112,6 +118,7 @@
       current.scoreTimesFive = scoreTimesFive;
       current.view = viewMode;
       current.showExtras = showExtras;
+      current.animations = animations;
       localStorage.setItem(HOST_SETTINGS_KEY, JSON.stringify(current));
     } catch {
       // Storage unavailable (e.g. private mode): keep settings in memory only.
@@ -297,6 +304,10 @@
       <Checkbox id="scoreTimesFive-{uid}" bind:checked={scoreTimesFive} />
       <Label for="scoreTimesFive-{uid}" class="cursor-pointer text-sm">Multiply score by 5</Label>
     </div>
+    <div class="mt-2.5 flex items-center gap-2">
+      <Checkbox id="animations-{uid}" bind:checked={animations} />
+      <Label for="animations-{uid}" class="cursor-pointer text-sm">Enable animations</Label>
+    </div>
   </div>
 {/snippet}
 
@@ -458,6 +469,7 @@
         {@const elapsed =
           tick >= 0 && player.startingTime ? (player.finishingTime || Date.now()) - player.startingTime : null}
         <div
+          animate:flip={flipParams}
           class="flex items-center gap-3 rounded-lg border-2 border-solid p-3 transition-colors {player.startingTime
             ? player.finishingTime
               ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
@@ -550,7 +562,7 @@
     </div>
 
     {#key viewMode}
-      <div in:fade={{ duration: 150 }}>
+      <div in:fade={fadeParams}>
         {#if viewMode === "list"}
           {#if showExtras}
             <div
@@ -576,7 +588,7 @@
           {/if}
           <div class="lg:hidden">
             {#key mobileTab}
-              <div in:fade={{ duration: 150 }}>
+              <div in:fade={fadeParams}>
                 {#if mobileTab === "players" || !showExtras}
                   {@render playerListPanel("list-mobile")}
                 {:else}
@@ -592,7 +604,7 @@
           >
             {@render playerListPanel("list-desktop")}
             {#if showExtras}
-              <div transition:slide={{ duration: 200 }}>
+              <div transition:slide={slideParams}>
                 {@render extrasStack("list-desktop")}
               </div>
             {/if}
@@ -635,6 +647,7 @@
               {@const elapsed =
                 tick >= 0 && player.startingTime ? (player.finishingTime || Date.now()) - player.startingTime : null}
               <div
+                animate:flip={flipParams}
                 class="flex flex-col gap-2 rounded-xl border-2 border-solid p-3 transition-colors {player.startingTime
                   ? player.finishingTime
                     ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
@@ -700,7 +713,7 @@
         </div>
 
         {#if showExtras && logsOpen}
-          <div class="mathex-panel rounded-2xl p-5 sm:p-6 2xl:hidden" transition:slide={{ duration: 200 }}>
+          <div class="mathex-panel rounded-2xl p-5 sm:p-6 2xl:hidden" transition:slide={slideParams}>
             <div class="flex items-center justify-end">
               <Button variant="outline" size="sm" onclick={() => (logsOpen = false)} aria-label="Hide logs">
                 <X class="h-4 w-4" />
@@ -713,7 +726,7 @@
         {/if}
 
         {#if showExtras}
-          <div class="grid items-start gap-4 xl:grid-cols-2" transition:slide={{ duration: 200 }}>
+          <div class="grid items-start gap-4 xl:grid-cols-2" transition:slide={slideParams}>
             {@render alertsPanel()}
             {@render leaderboardPanel()}
           </div>
@@ -721,7 +734,7 @@
       </div>
 
       {#if showExtras}
-        <div class="mathex-panel hidden rounded-2xl p-5 sm:p-6 2xl:block" transition:fade={{ duration: 200 }}>
+        <div class="mathex-panel hidden rounded-2xl p-5 sm:p-6 2xl:block" transition:fade={fadeParams}>
           {@render logsPanel("tiles-desktop")}
         </div>
       {/if}
