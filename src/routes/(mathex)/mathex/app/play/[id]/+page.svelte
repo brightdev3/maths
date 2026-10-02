@@ -4,6 +4,7 @@
   import {
     type RoomServerToClientEvents,
     type RoomClientToServerEvents,
+    type RoomSettings,
     type State,
     type LeaderboardEntry,
     Question
@@ -27,6 +28,7 @@
   import CircleX from "@lucide/svelte/icons/circle-x";
   import Flag from "@lucide/svelte/icons/flag";
   import Timer from "@lucide/svelte/icons/timer";
+  import Hourglass from "@lucide/svelte/icons/hourglass";
   import CircleMinus from "@lucide/svelte/icons/circle-minus";
   import UserX from "@lucide/svelte/icons/user-x";
 
@@ -176,6 +178,16 @@
   let leaderboard: LeaderboardEntry[] = $state([]);
   socket.on("leaderboard", (data) => (leaderboard = data));
 
+  let roomSettings: RoomSettings | null = $state(null);
+  socket.on("roomSettings", (settings) => (roomSettings = settings));
+  let endsAt: number | null = $state(null);
+  socket.on("gameEndsAt", (deadline) => (endsAt = deadline));
+  let endsInMs = $derived.by(() => {
+    // Re-evaluate as the clock ticks.
+    void timePassed;
+    return endsAt ? Math.max(0, endsAt - Date.now()) : null;
+  });
+
   function joinRoom() {
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -296,6 +308,17 @@
             <p class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">Elapsed time</p>
           </div>
         </div>
+        {#if endsInMs !== null}
+          <div class="flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              ><Hourglass class="h-4 w-4" /></span
+            >
+            <div>
+              <p class="text-xl font-bold tabular-nums sm:text-2xl">{msToMinutesAndSeconds(endsInMs)}</p>
+              <p class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">Time left</p>
+            </div>
+          </div>
+        {/if}
         <div class="text-right">
           <p class="text-sm font-bold">
             Question {currentQuestion.number}<span class="text-muted-foreground"> / {questionCount}</span>
