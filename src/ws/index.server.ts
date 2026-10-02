@@ -177,6 +177,7 @@ export const createWSServer = (base: ServerInstance) => {
       saveRoom(room);
       roomNamespace.emit("roomSettings", room.settings);
       roomNamespace.emit("gameEndsAt", room.endsAt);
+      roomNamespace.emit("leaderboard", buildLeaderboard(room));
       roomManageNamespace.emit("state", room.state);
       roomManageNamespace.emit("playerData", getPlayers(room));
       roomManageNamespace.emit("gameEndsAt", room.endsAt);
@@ -422,6 +423,7 @@ export const createWSServer = (base: ServerInstance) => {
               );
             }
             io.of(`/manage-${room.id}`).emit("playerData", getPlayers(room));
+            socket.nsp.emit("leaderboard", buildLeaderboard(room));
           } else {
             socket.emit("alert", "error", "Wrong!");
             const wrongLog: LogEntry = {
@@ -492,6 +494,7 @@ export const createWSServer = (base: ServerInstance) => {
         );
       }
       io.of(`/manage-${room.id}`).emit("playerData", getPlayers(room));
+      socket.nsp.emit("leaderboard", buildLeaderboard(room));
     });
     socket.on("visibilityChange", async (hidden) => {
       if (!room.visibilityTracking || room.state !== "started" || !socket.data.name) return;

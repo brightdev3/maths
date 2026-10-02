@@ -44,6 +44,7 @@
   let gameTimerMinutes = $state(0);
   let endOnPerfectScore = $state(false);
   let allowLateJoin = $state(true);
+  let allowShowLeaderboard = $state(true);
 
   function parseQuestions(value: unknown) {
     const source = value && typeof value === "object" && "questions" in value ? value.questions : value;
@@ -130,7 +131,8 @@
         ...DEFAULT_ROOM_SETTINGS,
         gameTimerMs: gameTimerMinutes > 0 ? Math.round(gameTimerMinutes * 60000) : null,
         endOnPerfectScore,
-        allowLateJoin
+        allowLateJoin,
+        showLeaderboard: allowShowLeaderboard
       };
       socket.emit("newRoom", roomNameResult.data, set, runningTime * 1000, visibilityTracking, settings);
       socket.once("goto", (path) => {
@@ -365,6 +367,24 @@
                             >
                             <p class="mt-1 text-xs leading-5 text-muted-foreground">
                               New players can join after the game has started.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Player tools</p>
+                    <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                        <div class="flex items-start gap-2.5">
+                          <Checkbox id="allow-leaderboard" bind:checked={allowShowLeaderboard} />
+                          <div>
+                            <Label for="allow-leaderboard" class="cursor-pointer text-sm font-semibold"
+                              >Live leaderboard</Label
+                            >
+                            <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                              Players can open standings next to the question.
                             </p>
                           </div>
                         </div>

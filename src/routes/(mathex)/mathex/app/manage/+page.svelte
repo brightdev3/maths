@@ -517,6 +517,19 @@
             <Label for="allowLateJoin-{uid}" class="cursor-pointer text-sm">Allow late joining</Label>
           </div>
         </div>
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Player tools</p>
+          <div class="mt-2 space-y-2">
+            <div class="flex items-center gap-2">
+              <Checkbox
+                id="showLeaderboard-{uid}"
+                checked={roomSettings.showLeaderboard}
+                onCheckedChange={(checked) => socket.emit("updateSettings", { showLeaderboard: checked === true })}
+              />
+              <Label for="showLeaderboard-{uid}" class="cursor-pointer text-sm">Live leaderboard</Label>
+            </div>
+          </div>
+        </div>
       </div>
     {:else}
       <p class="mt-3 text-sm text-muted-foreground">Loading game options…</p>
