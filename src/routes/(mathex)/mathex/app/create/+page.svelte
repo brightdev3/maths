@@ -56,6 +56,8 @@
   let allowChat = $state(false);
   let chatDialogOpen = $state(false);
   let chatDontShowAgain = $state(false);
+  let chatKey = $state(0);
+  let chatConfirmed = false;
 
   function requestChatToggle(on: boolean) {
     if (!on) {
@@ -67,13 +69,22 @@
       return;
     }
     chatDontShowAgain = false;
+    chatConfirmed = false;
     chatDialogOpen = true;
   }
 
   function confirmChatDialog() {
     if (chatDontShowAgain) dismissChatDisclaimer();
+    chatConfirmed = true;
     allowChat = true;
     chatDialogOpen = false;
+  }
+
+  function onChatDialogOpenChange(open: boolean) {
+    // The checkbox flips visually on click; if the dialog was dismissed
+    // without confirming, remount it so it reflects the real (off) value.
+    if (!open && !chatConfirmed) chatKey++;
+    chatConfirmed = false;
   }
 
   function parseQuestions(value: unknown) {
@@ -179,7 +190,7 @@
   }
 </script>
 
-<AlertDialog.Root bind:open={chatDialogOpen}>
+<AlertDialog.Root bind:open={chatDialogOpen} onOpenChange={onChatDialogOpenChange}>
   <AlertDialog.Content>
     <AlertDialog.Header>
       <AlertDialog.Title>Enable player chat?</AlertDialog.Title>
@@ -454,11 +465,13 @@
                       </div>
                       <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
-                          <Checkbox
-                            id="allow-chat"
-                            checked={allowChat}
-                            onCheckedChange={(checked) => requestChatToggle(checked === true)}
-                          />
+                          {#key chatKey}
+                            <Checkbox
+                              id="allow-chat"
+                              checked={allowChat}
+                              onCheckedChange={(checked) => requestChatToggle(checked === true)}
+                            />
+                          {/key}
                           <div>
                             <Label for="allow-chat" class="cursor-pointer text-sm font-semibold">Player chat</Label>
                             <p class="mt-1 text-xs leading-5 text-muted-foreground">
