@@ -4,6 +4,7 @@
   import {
     type RoomServerToClientEvents,
     type RoomClientToServerEvents,
+    type ChatMessage,
     type RoomSettings,
     type State,
     type LeaderboardEntry,
@@ -33,6 +34,8 @@
   import UserX from "@lucide/svelte/icons/user-x";
   import Trophy from "@lucide/svelte/icons/trophy";
   import CalculatorIcon from "@lucide/svelte/icons/calculator";
+  import MessageCircle from "@lucide/svelte/icons/message-circle";
+  import Send from "@lucide/svelte/icons/send";
   import Calculator from "$lib/mathex/Calculator.svelte";
 
   import { Confetti } from "svelte-confetti";
@@ -195,14 +198,38 @@
     return endsAt ? Math.max(0, endsAt - Date.now()) : null;
   });
 
-  // Right-hand panel during play. Chat joins this slot in a later step.
-  let sidePanel: "leaderboard" | null = $state(null);
+  // Right-hand panel during play: standings or chat.
+  let sidePanel: "leaderboard" | "chat" | null = $state(null);
   let calcOpen = $state(false);
   // Close tools the host disables.
   $effect(() => {
     if (roomSettings && !roomSettings.showLeaderboard && sidePanel === "leaderboard") sidePanel = null;
     if (roomSettings && !roomSettings.allowCalculator && calcOpen) calcOpen = false;
+    if (roomSettings && !roomSettings.allowChat && sidePanel === "chat") sidePanel = null;
   });
+
+  let chatMessages: ChatMessage[] = $state([]);
+  let chatDraft = $state("");
+  let chatUnread = $state(0);
+  let chatScrollEl: HTMLDivElement | null = $state(null);
+  socket.on("chatHistory", (messages) => {
+    chatMessages = messages.slice(-200);
+  });
+  socket.on("chatMessage", (message) => {
+    chatMessages = [...chatMessages, message].slice(-200);
+    if (sidePanel !== "chat") chatUnread++;
+  });
+  $effect(() => {
+    chatMessages.length;
+    if (sidePanel === "chat" && chatScrollEl) chatScrollEl.scrollTop = chatScrollEl.scrollHeight;
+  });
+
+  function sendChat() {
+    const text = chatDraft.trim();
+    if (!text) return;
+    socket.emit("sendChat", text.slice(0, 500));
+    chatDraft = "";
+  }
 
   // Keep the player's own row visible in a long leaderboard.
   let lbScrollEl: HTMLDivElement | null = $state(null);
@@ -399,7 +426,7 @@
         </div>
       </header>
 
-      {#if roomSettings?.showLeaderboard !== false || roomSettings?.allowCalculator !== false}
+      {#if roomSettings?.showLeaderboard !== false || roomSettings?.allowCalculator !== false || roomSettings?.allowChat === true}
         <div class="mt-3 flex flex-wrap gap-2">
           {#if roomSettings?.showLeaderboard !== false}
           <Button
@@ -410,6 +437,24 @@
           >
             <Trophy class="h-4 w-4" /> {sidePanel === "leaderboard" ? "Hide standings" : "Standings"}
           </Button>
+          {/if}
+          {#if roomSettings?.allowChat === true}
+            <Button
+              variant={sidePanel === "chat" ? "default" : "outline"}
+              size="sm"
+              onclick={() => {
+                sidePanel = sidePanel === "chat" ? null : "chat";
+                chatUnread = 0;
+              }}
+              aria-pressed={sidePanel === "chat"}
+            >
+              <MessageCircle class="h-4 w-4" /> Chat
+              {#if chatUnread > 0}
+                <span class="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[0.65rem] font-bold text-destructive-foreground">
+                  {chatUnread > 99 ? "99+" : chatUnread}
+                </span>
+              {/if}
+            </Button>
           {/if}
           {#if roomSettings?.allowCalculator !== false}
             <Button
@@ -544,6 +589,43 @@
             {:else}
               <p class="mt-3 text-sm text-muted-foreground">Standings appear once scoring starts.</p>
             {/if}
+          </div>
+        {:else if sidePanel === "chat" && roomSettings?.allowChat === true}
+          <div class="mathex-panel flex max-h-[32rem] flex-col rounded-3xl p-5">
+            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+              <MessageCircle class="h-3.5 w-3.5" /> Live chat
+            </div>
+            <div
+              bind:this={chatScrollEl}
+              class="mt-3 flex min-h-40 flex-col gap-1.5 overflow-y-auto scrollbar-thin"
+            >
+              {#each chatMessages as message (message.id)}
+                <div
+                  class="max-w-[85%] rounded-xl px-2.5 py-1.5 {message.name === name
+                    ? 'self-end bg-primary/10'
+                    : 'self-start bg-muted/60'}"
+                >
+                  {#if message.name !== name}
+                    <p class="text-[0.65rem] font-bold text-muted-foreground">{message.name}</p>
+                  {/if}
+                  <p class="text-sm break-words">{message.text}</p>
+                </div>
+              {:else}
+                <p class="text-sm text-muted-foreground">No messages yet. Say hi!</p>
+              {/each}
+            </div>
+            <form
+              class="mt-3 flex gap-2"
+              onsubmit={(e) => {
+                e.preventDefault();
+                sendChat();
+              }}
+            >
+              <Input bind:value={chatDraft} maxlength={500} placeholder="Message everyone…" class="flex-1" />
+              <Button type="submit" size="icon" aria-label="Send chat message" disabled={!chatDraft.trim()}>
+                <Send class="h-4 w-4" />
+              </Button>
+            </form>
           </div>
         {/if}
       </div>

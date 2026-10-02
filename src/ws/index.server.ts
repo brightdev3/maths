@@ -187,6 +187,7 @@ export const createWSServer = (base: ServerInstance) => {
     });
     socket.on("updateSettings", (partial) => {
       if (!partial || typeof partial !== "object") return;
+      const chatWasAllowed = room.settings.allowChat;
       const next = room.settings;
       for (const key of [
         "allowLateJoin",
@@ -201,6 +202,9 @@ export const createWSServer = (base: ServerInstance) => {
       saveRoom(room);
       roomNamespace.emit("roomSettings", room.settings);
       roomManageNamespace.emit("roomSettings", room.settings);
+      if (!chatWasAllowed && next.allowChat && room.chat.length > 0) {
+        roomNamespace.emit("chatHistory", room.chat);
+      }
     });
     socket.on("setGameTimer", (minutes) => {
       if (minutes === null || minutes === undefined || Number(minutes) <= 0) {
@@ -495,6 +499,22 @@ export const createWSServer = (base: ServerInstance) => {
       }
       io.of(`/manage-${room.id}`).emit("playerData", getPlayers(room));
       socket.nsp.emit("leaderboard", buildLeaderboard(room));
+    });
+    socket.on("sendChat", (text) => {
+      if (!socket.data.name || !room.settings.allowChat) return;
+      const clean = String(text ?? "").trim().slice(0, 500);
+      if (!clean) return;
+      const message = {
+        id: randomBytes(8).toString("hex"),
+        name: socket.data.name,
+        text: clean,
+        timestamp: Date.now()
+      };
+      room.chat.push(message);
+      if (room.chat.length > 200) room.chat = room.chat.slice(-200);
+      saveRoom(room);
+      socket.nsp.emit("chatMessage", message);
+      roomManageNamespace.emit("chatMessage", message);
     });
     socket.on("visibilityChange", async (hidden) => {
       if (!room.visibilityTracking || room.state !== "started" || !socket.data.name) return;
