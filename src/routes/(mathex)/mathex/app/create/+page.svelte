@@ -8,6 +8,9 @@
 
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Clock3 from "@lucide/svelte/icons/clock-3";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import Hourglass from "@lucide/svelte/icons/hourglass";
+  import Trophy from "@lucide/svelte/icons/trophy";
   import Upload from "@lucide/svelte/icons/upload";
   import FileJson from "@lucide/svelte/icons/file-json";
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
@@ -15,6 +18,8 @@
   import {
     Question,
     RoomName,
+    DEFAULT_ROOM_SETTINGS,
+    type RoomSettings,
     type RoomCreateServerToClientEvents,
     type RoomCreateClientToServerEvents
   } from "$lib/mathex/schemas";
@@ -35,6 +40,9 @@
   let dragOver = $state(false);
   let runningTime = $state(16);
   let visibilityTracking = $state(false);
+  let showExtraOptions = $state(false);
+  let gameTimerMinutes = $state(0);
+  let endOnPerfectScore = $state(false);
 
   function parseQuestions(value: unknown) {
     const source = value && typeof value === "object" && "questions" in value ? value.questions : value;
@@ -117,7 +125,12 @@
       const result = parseQuestions(parsed);
       if (!result.success) throw new Error("Invalid question set");
       const set = result.data;
-      socket.emit("newRoom", roomNameResult.data, set, runningTime * 1000, visibilityTracking);
+      const settings: RoomSettings = {
+        ...DEFAULT_ROOM_SETTINGS,
+        gameTimerMs: gameTimerMinutes > 0 ? Math.round(gameTimerMinutes * 60000) : null,
+        endOnPerfectScore
+      };
+      socket.emit("newRoom", roomNameResult.data, set, runningTime * 1000, visibilityTracking, settings);
       socket.once("goto", (path) => {
         socket.disconnect();
         goto(path);
@@ -286,6 +299,60 @@
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div class="rounded-2xl border border-border/70">
+              <button
+                type="button"
+                class="flex w-full items-center justify-between p-3.5 text-left"
+                onclick={() => (showExtraOptions = !showExtraOptions)}
+                aria-expanded={showExtraOptions}
+              >
+                <span class="text-sm font-semibold">Extra options</span>
+                <ChevronDown
+                  class="h-4 w-4 text-muted-foreground transition-transform {showExtraOptions ? 'rotate-180' : ''}"
+                />
+              </button>
+              {#if showExtraOptions}
+                <div class="space-y-4 border-t border-border/70 p-3.5">
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="space-y-2">
+                      <Label for="game-timer" class="flex items-center gap-2 font-semibold"
+                        ><Hourglass class="h-4 w-4 text-primary" /> Game timer</Label
+                      >
+                      <div class="relative">
+                        <Input
+                          id="game-timer"
+                          type="number"
+                          min={0}
+                          max={180}
+                          bind:value={gameTimerMinutes}
+                          class="pr-12"
+                        />
+                        <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">min</span>
+                      </div>
+                      <p class="text-xs leading-5 text-muted-foreground">
+                        Ends the game for everyone. 0 means no timer.
+                      </p>
+                    </div>
+                    <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="flex items-start gap-2.5">
+                        <Checkbox id="end-on-perfect" bind:checked={endOnPerfectScore} />
+                        <div>
+                          <Label
+                            for="end-on-perfect"
+                            class="flex cursor-pointer items-center gap-1.5 text-sm font-semibold"
+                            ><Trophy class="h-4 w-4 text-primary" /> End on perfect score</Label
+                          >
+                          <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                            Finish as soon as someone answers everything correctly.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {/if}
             </div>
 
             <Button type="submit" class="mt-2 w-full shadow-lg shadow-primary/20" size="lg" disabled={!canCreate}>

@@ -14,6 +14,11 @@ export interface RoomServerToClientEvents {
   gameStart: (startingTime: number) => void;
   gameFinish: () => void;
   kicked: () => void;
+  roomSettings: (settings: RoomSettings) => void;
+  gameEndsAt: (endsAt: number | null) => void;
+  chatMessage: (message: ChatMessage) => void;
+  chatHistory: (messages: ChatMessage[]) => void;
+  joinDenied: (reason: string) => void;
   running: (durationMs: number) => void;
   answerResult: (correct: boolean) => void;
   stopRunning: () => void;
@@ -36,6 +41,7 @@ export interface RoomClientToServerEvents {
   answer: (value: string | number | (string | number)[]) => void;
   skip: () => void;
   visibilityChange: (hidden: boolean) => void;
+  sendChat: (text: string) => void;
 }
 
 export interface RoomInterServerEvents {}
@@ -80,7 +86,8 @@ export interface RoomCreateClientToServerEvents {
     name: string,
     questions: z.infer<typeof Question>[],
     runningTimeMs: number,
-    visibilityTracking: boolean
+    visibilityTracking: boolean,
+    settings: RoomSettings
   ) => void;
   checkRoom: (id: string, callback: (exists: boolean) => void) => void;
 }
@@ -98,6 +105,8 @@ export interface RoomManageClientToServerEvents {
   finish: () => void;
   alertAll: (type: ToastT["type"], message: string) => void;
   kick: (playerId: string) => void;
+  updateSettings: (settings: Partial<RoomSettings>) => void;
+  setGameTimer: (minutes: number | null) => void;
 }
 
 export interface RoomManageServerToClientEvents {
@@ -107,6 +116,9 @@ export interface RoomManageServerToClientEvents {
   logs: (data: LogEntry[]) => void;
   log: (entry: LogEntry) => void;
   leaderboard: (data: LeaderboardEntry[]) => void;
+  roomSettings: (settings: RoomSettings) => void;
+  gameEndsAt: (endsAt: number | null) => void;
+  chatMessage: (message: ChatMessage) => void;
 }
 
 export interface RoomManageInterServerEvents {}
@@ -177,6 +189,34 @@ export const QuestionSet = z.object({
 
 export type RoomState = "lobby" | "started" | "finished";
 
+export interface RoomSettings {
+  allowLateJoin: boolean;
+  showLeaderboard: boolean;
+  allowCalculator: boolean;
+  allowChat: boolean;
+  allowSketch: boolean;
+  /** Configured game length in ms (from setup). Null means no timer. */
+  gameTimerMs: number | null;
+  endOnPerfectScore: boolean;
+}
+
+export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
+  allowLateJoin: true,
+  showLeaderboard: true,
+  allowCalculator: true,
+  allowChat: false,
+  allowSketch: true,
+  gameTimerMs: null,
+  endOnPerfectScore: false
+};
+
+export interface ChatMessage {
+  id: string;
+  name: string;
+  text: string;
+  timestamp: number;
+}
+
 export interface Room {
   id: string;
   name: string;
@@ -187,6 +227,10 @@ export interface Room {
   visibilityTracking: boolean;
   players: Map<string, RoomSocketData>;
   logs: LogEntry[];
+  settings: RoomSettings;
+  /** Live deadline timestamp. Null when no timer is running. */
+  endsAt: number | null;
+  chat: ChatMessage[];
 }
 
 export interface ClientKnownRoom {

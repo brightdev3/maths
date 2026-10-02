@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { Database } from "bun:sqlite";
 
 import type { Room, RoomSocketData } from "./schemas";
+import { DEFAULT_ROOM_SETTINGS } from "./schemas";
 
 type StoredRoom = Omit<Room, "players"> & { players: [string, RoomSocketData][] };
 
@@ -33,7 +34,14 @@ export class RoomStore {
           player.isRunning = false;
           player.runningUntil = null;
         }
-        rooms.set(row.id, { ...stored, players });
+        rooms.set(row.id, {
+          ...stored,
+          players,
+          // Rooms saved before game options existed get sensible defaults.
+          settings: { ...DEFAULT_ROOM_SETTINGS, ...(stored.settings ?? {}) },
+          endsAt: null,
+          chat: Array.isArray(stored.chat) ? stored.chat : []
+        });
       } catch {
         // Keep a corrupt historical row from preventing active rooms from loading.
       }

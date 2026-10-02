@@ -22,6 +22,7 @@ import {
   type LogEntry,
   type LeaderboardEntry,
   type SolutionType,
+  type RoomSettings,
   RoomName,
   Question
 } from "../lib/mathex/schemas";
@@ -42,6 +43,13 @@ export const createWSServer = (base: ServerInstance) => {
   const roomStore = new RoomStore();
   const rooms = roomStore.loadRooms();
   const saveRoom = (room: Room) => roomStore.save(room);
+  // Live game-end countdowns. Like pending answer timers, these do not survive a restart.
+  const endTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  function clearEndTimer(roomId: string) {
+    const timer = endTimers.get(roomId);
+    if (timer) clearTimeout(timer);
+    endTimers.delete(roomId);
+  }
   const io = new Server(base, {
     serveClient: false,
     // Question images are embedded as data URLs in the portable question set.
@@ -64,10 +72,11 @@ export const createWSServer = (base: ServerInstance) => {
     RoomCreateSocketData
   > = io.of("/rooms");
   roomCreateNamespace.on("connection", (socket) => {
-    socket.on("newRoom", (name, questions, runningTimeMs, visibilityTracking) => {
+    socket.on("newRoom", (name, questions, runningTimeMs, visibilityTracking, settings) => {
       const roomName = RoomName.parse(name);
       const roomQuestions = z.array(Question).parse(questions);
       const clampedTime = Math.min(Math.max(runningTimeMs || 16000, 1000), 60000);
+      const roomSettings = sanitizeRoomSettings(settings);
 
       let roomId = "";
       do {
@@ -83,7 +92,10 @@ export const createWSServer = (base: ServerInstance) => {
         runningTimeMs: clampedTime,
         visibilityTracking,
         players: new Map(),
-        logs: []
+        logs: [],
+        settings: roomSettings,
+        endsAt: null,
+        chat: []
       };
       rooms.set(roomId, room);
       saveRoom(room);
@@ -123,6 +135,8 @@ export const createWSServer = (base: ServerInstance) => {
       socket.emit("state", room.state);
       socket.emit("playerData", getPlayers(room));
       socket.emit("logs", room.logs);
+      socket.emit("roomSettings", room.settings);
+      socket.emit("gameEndsAt", room.endsAt);
       if (room.state === "finished") socket.emit("leaderboard", buildLeaderboard(room));
     });
     socket.on("alertAll", async (type, message) => {
@@ -157,27 +171,62 @@ export const createWSServer = (base: ServerInstance) => {
           firstQuestion.skippable
         );
       }
+      clearEndTimer(room.id);
+      room.endsAt = room.settings.gameTimerMs ? startedAt + room.settings.gameTimerMs : null;
+      if (room.endsAt) scheduleEndTimer(room, room.endsAt - Date.now());
       saveRoom(room);
+      roomNamespace.emit("roomSettings", room.settings);
+      roomNamespace.emit("gameEndsAt", room.endsAt);
       roomManageNamespace.emit("state", room.state);
       roomManageNamespace.emit("playerData", getPlayers(room));
+      roomManageNamespace.emit("gameEndsAt", room.endsAt);
     });
     socket.on("finish", async () => {
-      if (room.state !== "started") return;
-      room.state = "finished";
-      roomNamespace.emit("alert", "info", "Game has finished for everyone!");
-      const finishedAt = Date.now();
-      for (const player of room.players.values()) {
-        if (!player.finishingTime) player.finishingTime = finishedAt;
+      await finishRoom(room, "host");
+    });
+    socket.on("updateSettings", (partial) => {
+      if (!partial || typeof partial !== "object") return;
+      const next = room.settings;
+      for (const key of [
+        "allowLateJoin",
+        "showLeaderboard",
+        "allowCalculator",
+        "allowChat",
+        "allowSketch",
+        "endOnPerfectScore"
+      ] as const) {
+        if (typeof partial[key] === "boolean") next[key] = partial[key];
       }
       saveRoom(room);
-      const lb = buildLeaderboard(room);
-      for (const playerSocket of await roomNamespace.fetchSockets()) {
-        playerSocket.emit("gameFinish");
+      roomNamespace.emit("roomSettings", room.settings);
+      roomManageNamespace.emit("roomSettings", room.settings);
+    });
+    socket.on("setGameTimer", (minutes) => {
+      if (minutes === null || minutes === undefined || Number(minutes) <= 0) {
+        if (room.state === "started") {
+          clearEndTimer(room.id);
+          room.endsAt = null;
+          roomNamespace.emit("gameEndsAt", null);
+          roomManageNamespace.emit("gameEndsAt", null);
+        }
+        room.settings.gameTimerMs = null;
+        saveRoom(room);
+        roomManageNamespace.emit("roomSettings", room.settings);
+        return;
       }
-      roomNamespace.emit("leaderboard", lb);
-      roomManageNamespace.emit("state", room.state);
-      roomManageNamespace.emit("playerData", getPlayers(room));
-      roomManageNamespace.emit("leaderboard", lb);
+      const mins = Math.min(Math.max(Number(minutes) || 0, 0.5), 480);
+      if (room.state === "started") {
+        clearEndTimer(room.id);
+        room.endsAt = Date.now() + Math.round(mins * 60000);
+        scheduleEndTimer(room, room.endsAt - Date.now());
+        saveRoom(room);
+        roomNamespace.emit("gameEndsAt", room.endsAt);
+        roomManageNamespace.emit("gameEndsAt", room.endsAt);
+      } else {
+        room.settings.gameTimerMs = Math.round(mins * 60000);
+        saveRoom(room);
+        roomManageNamespace.emit("roomSettings", room.settings);
+      }
     });
     socket.on("kick", async (playerId) => {
       const target = room.players.get(playerId);
@@ -260,6 +309,9 @@ export const createWSServer = (base: ServerInstance) => {
       io.of(`/manage-${room.id}`).emit("playerData", getPlayers(room));
       socket.emit("joined", socket.data.name!);
       socket.emit("questionCount", room.questions.length);
+      socket.emit("roomSettings", room.settings);
+      socket.emit("gameEndsAt", room.endsAt);
+      if (room.settings.allowChat && room.chat.length > 0) socket.emit("chatHistory", room.chat);
       if (room.state === "lobby") {
         socket.emit("lobby");
       } else if (room.state === "started") {
@@ -312,7 +364,7 @@ export const createWSServer = (base: ServerInstance) => {
         socket.data.runningUntil = Date.now() + 900;
 
         // Let the player see the outcome before presenting the next action.
-        setTimeout(() => {
+        setTimeout(async () => {
           if (isCorrect) {
             socket.emit("alert", "success", "Correct!");
             socket.data.correctCount = (socket.data.correctCount ?? 0) + 1;
@@ -325,6 +377,15 @@ export const createWSServer = (base: ServerInstance) => {
             room.logs.push(correctLog);
             saveRoom(room);
             roomManageNamespace.emit("log", correctLog);
+            if (room.settings.endOnPerfectScore && (socket.data.correctCount ?? 0) >= room.questions.length) {
+              socket.emit("confetti");
+              socket.emit("stopRunning");
+              socket.data.isRunning = false;
+              socket.data.runningUntil = null;
+              saveRoom(room);
+              await finishRoom(room, "perfect", socket.data.name || undefined);
+              return;
+            }
             if (socket.data.currentQuestion >= room.questions.length) {
               socket.data.finishingTime = Date.now();
               socket.emit("alert", "success", "You have completed the questions!");
@@ -467,6 +528,62 @@ export const createWSServer = (base: ServerInstance) => {
     });
     setTimeout(() => io.of(`/manage-${room.id}`).emit("playerData", getPlayers(room)));
   });
+
+  function scheduleEndTimer(room: Room, ms: number) {
+    clearEndTimer(room.id);
+    endTimers.set(
+      room.id,
+      setTimeout(() => {
+        endTimers.delete(room.id);
+        void finishRoom(room, "time");
+      }, Math.max(ms, 0))
+    );
+  }
+
+  async function finishRoom(room: Room, reason: "host" | "time" | "perfect", highlightName?: string) {
+    if (room.state !== "started") return;
+    clearEndTimer(room.id);
+    room.state = "finished";
+    room.endsAt = null;
+    const finishedAt = Date.now();
+    for (const player of room.players.values()) {
+      if (!player.finishingTime) player.finishingTime = finishedAt;
+    }
+    saveRoom(room);
+    const lb = buildLeaderboard(room);
+    const roomNs = io.of(`/room-${room.id}`);
+    const manageNs = io.of(`/manage-${room.id}`);
+    const message =
+      reason === "time"
+        ? "Time is up! The game has finished."
+        : reason === "perfect"
+          ? `${highlightName || "Someone"} achieved a perfect score! Game over.`
+          : "Game has finished for everyone!";
+    roomNs.emit("alert", "info", message);
+    for (const playerSocket of await roomNs.fetchSockets()) {
+      playerSocket.emit("gameFinish");
+    }
+    roomNs.emit("leaderboard", lb);
+    roomNs.emit("gameEndsAt", null);
+    manageNs.emit("state", room.state);
+    manageNs.emit("playerData", getPlayers(room));
+    manageNs.emit("leaderboard", lb);
+    manageNs.emit("gameEndsAt", null);
+  }
+
+  function sanitizeRoomSettings(settings: Partial<RoomSettings> | undefined): RoomSettings {
+    const timerMs = Number(settings?.gameTimerMs);
+    return {
+      allowLateJoin: settings?.allowLateJoin !== false,
+      showLeaderboard: settings?.showLeaderboard !== false,
+      allowCalculator: settings?.allowCalculator !== false,
+      allowChat: settings?.allowChat === true,
+      allowSketch: settings?.allowSketch !== false,
+      gameTimerMs:
+        Number.isFinite(timerMs) && timerMs > 0 ? Math.min(Math.max(Math.round(timerMs), 30000), 8 * 3600000) : null,
+      endOnPerfectScore: settings?.endOnPerfectScore === true
+    };
+  }
 
   function getPlayers(room: Room) {
     const data = [...room.players.values()];

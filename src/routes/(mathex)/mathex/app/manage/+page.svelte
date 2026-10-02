@@ -5,6 +5,7 @@
   import {
     type RoomManageServerToClientEvents,
     type RoomManageClientToServerEvents,
+    type RoomSettings,
     type RoomState,
     type RoomSocketData,
     type LogEntry,
@@ -61,6 +62,15 @@
   socket.on("playerData", (data) => (players = data));
   let currentState: RoomState = $state("lobby");
   socket.on("state", (state) => (currentState = state));
+  let roomSettings: RoomSettings | null = $state(null);
+  socket.on("roomSettings", (settings) => (roomSettings = settings));
+  let endsAt: number | null = $state(null);
+  socket.on("gameEndsAt", (deadline) => (endsAt = deadline));
+  let timerMinutes = $state(5);
+  let endsInMs = $derived.by(() => {
+    void tick;
+    return endsAt ? Math.max(0, endsAt - Date.now()) : null;
+  });
 
   let totalQuestions = $derived(players.length > 0 ? players[0].totalQuestions : 0);
 
@@ -444,9 +454,69 @@
   </div>
 {/snippet}
 
+{#snippet gameOptionsPanel(uid: string)}
+  <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+    <Header size="h2">Game options</Header>
+    {#if roomSettings}
+      <div class="mt-4 space-y-4">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">End conditions</p>
+          <div class="mt-2 flex items-center gap-2">
+            <Checkbox
+              id="endOnPerfect-{uid}"
+              checked={roomSettings.endOnPerfectScore}
+              onCheckedChange={(checked) => socket.emit("updateSettings", { endOnPerfectScore: checked === true })}
+            />
+            <Label for="endOnPerfect-{uid}" class="cursor-pointer text-sm">End on perfect score</Label>
+          </div>
+          <div class="mt-3 rounded-xl border border-border/60 p-3">
+            {#if currentState === "started"}
+              <p class="text-sm">
+                {#if endsInMs !== null}
+                  Timer ends in <span class="font-bold tabular-nums">{msToMinutesAndSeconds(endsInMs)}</span>
+                {:else}
+                  <span class="text-muted-foreground">No timer running</span>
+                {/if}
+              </p>
+            {:else if roomSettings.gameTimerMs}
+              <p class="text-sm">
+                Timer set: <span class="font-bold tabular-nums"
+                  >{msToMinutesAndSeconds(roomSettings.gameTimerMs)}</span
+                >
+              </p>
+            {:else}
+              <p class="text-sm text-muted-foreground">No timer set</p>
+            {/if}
+            <div class="mt-2 flex gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={180}
+                bind:value={timerMinutes}
+                class="w-24"
+                aria-label="Timer minutes"
+              />
+              <Button size="sm" onclick={() => socket.emit("setGameTimer", timerMinutes)}>Set timer</Button>
+              <Button size="sm" variant="outline" onclick={() => socket.emit("setGameTimer", null)}>Cancel</Button>
+            </div>
+            <p class="mt-1.5 text-xs text-muted-foreground">
+              {currentState === "started"
+                ? "Minutes from now. Overrides the setup timer."
+                : "Applies when the game starts."}
+            </p>
+          </div>
+        </div>
+      </div>
+    {:else}
+      <p class="mt-3 text-sm text-muted-foreground">Loading game options…</p>
+    {/if}
+  </div>
+{/snippet}
+
 {#snippet extrasStack(uid: string)}
   <div class="flex min-w-0 flex-col gap-4">
     {@render alertsPanel()}
+    {@render gameOptionsPanel(uid)}
     {@render leaderboardPanel()}
     <div class="mathex-panel rounded-2xl p-5 sm:p-6">
       {@render logsPanel(uid)}
@@ -759,6 +829,7 @@
         {#if showExtras}
           <div class="grid items-start gap-4 xl:grid-cols-2" transition:slide={slideParams}>
             {@render alertsPanel()}
+            {@render gameOptionsPanel("tiles")}
             {@render leaderboardPanel()}
           </div>
         {/if}
