@@ -31,6 +31,7 @@
   import Hourglass from "@lucide/svelte/icons/hourglass";
   import CircleMinus from "@lucide/svelte/icons/circle-minus";
   import UserX from "@lucide/svelte/icons/user-x";
+  import Trophy from "@lucide/svelte/icons/trophy";
 
   import { Confetti } from "svelte-confetti";
   let confetti = $state(false);
@@ -192,6 +193,39 @@
     return endsAt ? Math.max(0, endsAt - Date.now()) : null;
   });
 
+  // Right-hand panel during play. Chat joins this slot in a later step.
+  let sidePanel: "leaderboard" | null = $state(null);
+  // Close panels the host disables.
+  $effect(() => {
+    if (roomSettings && !roomSettings.showLeaderboard && sidePanel === "leaderboard") sidePanel = null;
+  });
+
+  // Keep the player's own row visible in a long leaderboard.
+  let lbScrollEl: HTMLDivElement | null = $state(null);
+  let selfPinned: "top" | "bottom" | null = $state(null);
+  function updateSelfPin() {
+    const container = lbScrollEl;
+    if (!container || sidePanel !== "leaderboard") {
+      selfPinned = null;
+      return;
+    }
+    const selfRow = container.querySelector("[data-self-row]");
+    if (!(selfRow instanceof HTMLElement)) {
+      selfPinned = null;
+      return;
+    }
+    const box = container.getBoundingClientRect();
+    const row = selfRow.getBoundingClientRect();
+    if (row.top < box.top - 1) selfPinned = "top";
+    else if (row.bottom > box.bottom + 1) selfPinned = "bottom";
+    else selfPinned = null;
+  }
+  $effect(() => {
+    leaderboard;
+    sidePanel;
+    requestAnimationFrame(updateSelfPin);
+  });
+
   function joinRoom() {
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -251,6 +285,31 @@
   </AlertDialog.Content>
 </AlertDialog.Root>
 
+{#snippet liveRow(entry: LeaderboardEntry, self: boolean)}
+  <div
+    data-self-row={self ? "" : undefined}
+    class="flex items-center gap-2 rounded-lg border p-2 {self
+      ? 'border-primary/40 bg-primary/10'
+      : 'border-border/60 bg-muted/30'}"
+  >
+    <div
+      class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold {entry.rank === 1
+        ? 'bg-yellow-400 text-yellow-900'
+        : entry.rank === 2
+          ? 'bg-gray-300 text-gray-700'
+          : entry.rank === 3
+            ? 'bg-amber-600 text-white'
+            : 'bg-muted text-muted-foreground'}"
+    >
+      {entry.rank}
+    </div>
+    <span class="truncate text-sm font-medium {self ? 'text-primary' : ''}">{entry.name}</span>
+    <span class="ml-auto shrink-0 text-xs text-muted-foreground">
+      {entry.totalMs !== null ? msToMinutesAndSeconds(entry.totalMs) : "DNF"} &middot; {entry.questionsCompleted}/{entry.totalQuestions}
+    </span>
+  </div>
+{/snippet}
+
 <div class="mathex-shell min-h-screen p-4 sm:p-6">
   {#if gameState === "connecting"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
@@ -301,7 +360,7 @@
       </span>
     </div>
   {:else if gameState === "started"}
-    <div class="mx-auto w-full max-w-3xl">
+    <div class="mx-auto w-full {sidePanel ? 'max-w-5xl' : 'max-w-3xl'}">
       <header class="mathex-panel flex items-center justify-between rounded-2xl p-3.5 sm:p-4">
         <div class="flex items-center gap-3">
           <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"
@@ -336,8 +395,23 @@
         </div>
       </header>
 
+      {#if roomSettings?.showLeaderboard !== false}
+        <div class="mt-3 flex flex-wrap gap-2">
+          <Button
+            variant={sidePanel === "leaderboard" ? "default" : "outline"}
+            size="sm"
+            onclick={() => (sidePanel = sidePanel === "leaderboard" ? null : "leaderboard")}
+            aria-pressed={sidePanel === "leaderboard"}
+          >
+            <Trophy class="h-4 w-4" /> {sidePanel === "leaderboard" ? "Hide standings" : "Standings"}
+          </Button>
+        </div>
+      {/if}
+
+      <div class="mt-4 grid items-start gap-4 {sidePanel ? 'lg:grid-cols-[minmax(0,1fr)_300px]' : ''}">
+        <div class="min-w-0">
       {#if running}
-        <div class="mathex-panel mt-4 rounded-3xl p-7 text-center sm:p-9">
+        <div class="mathex-panel rounded-3xl p-7 text-center sm:p-9">
           {#if answerFeedback === "correct"}
             <div
               class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
@@ -424,6 +498,39 @@
           {/if}
         </div>
       {/if}
+        </div>
+        {#if sidePanel === "leaderboard" && roomSettings?.showLeaderboard !== false}
+          <div class="mathex-panel rounded-3xl p-5">
+            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+              <Trophy class="h-3.5 w-3.5" /> Live standings
+            </div>
+            {#if leaderboard.length > 0}
+              {@const myLiveEntry = leaderboard.find((e) => e.name === name)}
+              <div class="relative mt-3">
+                {#if myLiveEntry && selfPinned}
+                  <div
+                    class="absolute inset-x-0 z-10 {selfPinned === 'top' ? 'top-0' : 'bottom-0'}"
+                    aria-hidden="true"
+                  >
+                    {@render liveRow(myLiveEntry, true)}
+                  </div>
+                {/if}
+                <div
+                  bind:this={lbScrollEl}
+                  onscroll={updateSelfPin}
+                  class="flex max-h-96 flex-col gap-1.5 overflow-y-auto scrollbar-thin"
+                >
+                  {#each leaderboard as entry}
+                    {@render liveRow(entry, entry.name === name)}
+                  {/each}
+                </div>
+              </div>
+            {:else}
+              <p class="mt-3 text-sm text-muted-foreground">Standings appear once scoring starts.</p>
+            {/if}
+          </div>
+        {/if}
+      </div>
     </div>
   {:else if gameState === "finished"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
