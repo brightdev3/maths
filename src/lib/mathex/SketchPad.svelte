@@ -382,6 +382,13 @@
   }
 
   function onMove(event: PointerEvent) {
+    if (event.buttons === 0) {
+      // No button held: end any stale gesture (e.g. a pointerup missed
+      // outside the canvas) and just track the eraser ring.
+      if (drawing || currentStroke || moveDrag || resizeDrag) onUp();
+      if (erasing) eraserPos = position(event);
+      return;
+    }
     const drag = moveDrag;
     if (drag) {
       const box = boxes.find((b) => b.id === drag.id);
@@ -413,8 +420,9 @@
       return;
     }
     if (erasing) {
-      eraserPos = position(event);
-      if (event.buttons > 0) eraseAt(eraserPos);
+      const p = position(event);
+      eraserPos = p;
+      eraseAt(p);
       return;
     }
   }
@@ -451,7 +459,7 @@
       onpointermove={onMove}
       onpointerup={onUp}
       onpointercancel={onUp}
-      onpointerleave={onUp}
+      onlostpointercapture={onUp}
     ></canvas>
     {#if erasing && eraserPos}
       {@const diameter = eraserRadius() * 2}
@@ -485,7 +493,7 @@
         maxlength={500}
         placeholder="Type…"
         aria-label="Textbox content"
-        class="absolute block resize-none overflow-hidden bg-transparent p-0 leading-[1.25] outline-none"
+        class="absolute block resize-none overflow-hidden rounded-sm bg-card p-0 leading-[1.25] shadow-lg outline outline-2 outline-primary/60"
         style="left: {ex}px; top: {ey}px; color: {editorBox ? editorBox.color : color}; font: 600 {size}px ui-sans-serif, system-ui, sans-serif;"
         onblur={commitText}
         onkeydown={(e) => {
