@@ -5,7 +5,7 @@
   import Trash from "@lucide/svelte/icons/trash";
   import X from "@lucide/svelte/icons/x";
 
-  let { onclose = () => {} }: { onclose?: () => void } = $props();
+  let { open = true, onclose = () => {} }: { open?: boolean; onclose?: () => void } = $props();
 
   let canvas: HTMLCanvasElement | null = $state(null);
   let drawing = $state(false);
@@ -13,18 +13,18 @@
   let erasing = $state(false);
   let lineWidth = $state(4);
 
-  const colors = ["#171717", "#dc2626", "#2563eb", "#16a34a", "#9333ea", "#ea580c"];
+  const colors = ["#171717", "#ffffff", "#dc2626", "#2563eb", "#16a34a", "#9333ea", "#ea580c"];
 
   function context() {
     return canvas?.getContext("2d") ?? null;
   }
 
   function sizeCanvas() {
-    if (!canvas) return;
+    if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return;
     const snapshot = canvas.width > 0 ? canvas.toDataURL() : null;
     const ratio = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(window.innerWidth * ratio);
-    canvas.height = Math.floor(window.innerHeight * ratio);
+    canvas.width = Math.floor(canvas.clientWidth * ratio);
+    canvas.height = Math.floor(canvas.clientHeight * ratio);
     const ctx = context();
     if (!ctx) return;
     ctx.scale(ratio, ratio);
@@ -34,7 +34,8 @@
       const img = new Image();
       img.onload = () => {
         const target = context();
-        if (target) target.drawImage(img, 0, 0, window.innerWidth, window.innerHeight);
+        if (target && canvas)
+          target.drawImage(img, 0, 0, canvas.clientWidth, canvas.clientHeight);
       };
       img.src = snapshot;
     }
@@ -44,6 +45,11 @@
     sizeCanvas();
     window.addEventListener("resize", sizeCanvas);
     return () => window.removeEventListener("resize", sizeCanvas);
+  });
+
+  // The canvas has no size while hidden, so (re)size every time it opens.
+  $effect(() => {
+    if (open) sizeCanvas();
   });
 
   function position(event: PointerEvent) {
@@ -88,7 +94,12 @@
   }
 </script>
 
-<div class="fixed inset-0 z-50 flex flex-col bg-white dark:bg-zinc-950" role="dialog" aria-label="Sketch pad">
+<div
+  class="fixed inset-0 z-50 flex flex-col {open ? '' : 'hidden'}"
+  role="dialog"
+  aria-label="Sketch pad"
+  aria-hidden={open ? undefined : "true"}
+>
   <div class="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 sm:gap-3">
     <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sketch pad</span>
     <div class="flex items-center gap-1" role="group" aria-label="Pen colour">

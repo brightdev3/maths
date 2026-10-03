@@ -647,9 +647,10 @@
     {#if calcOpen && roomSettings?.allowCalculator !== false}
       <Calculator onclose={() => (calcOpen = false)} />
     {/if}
-    {#if sketchOpen && roomSettings?.allowSketch !== false}
-      <SketchPad onclose={() => (sketchOpen = false)} />
-    {/if}
+    <SketchPad
+      open={sketchOpen && roomSettings?.allowSketch !== false}
+      onclose={() => (sketchOpen = false)}
+    />
   {:else if gameState === "finished"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
       <div class="mathex-panel w-full max-w-md rounded-3xl p-7 text-center sm:p-9">
