@@ -5,6 +5,8 @@
   import Eraser from "@lucide/svelte/icons/eraser";
   import Trash from "@lucide/svelte/icons/trash";
   import Type from "@lucide/svelte/icons/type";
+  import Pen from "@lucide/svelte/icons/pen";
+  import Mouse from "@lucide/svelte/icons/mouse";
   import X from "@lucide/svelte/icons/x";
 
   let { open = true, onclose = () => {} }: { open?: boolean; onclose?: () => void } = $props();
@@ -38,6 +40,7 @@
 
   let drawing = $state(false);
   let currentStroke: Stroke | null = null;
+  let tool: "pen" | "eraser" | "text" | "interact" = $state("pen");
   let color = $state("#171717");
   let colorTouched = false;
 
@@ -57,8 +60,6 @@
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
   });
-  let erasing = $state(false);
-  let textArmed = $state(false);
   let lineWidth = $state(4);
 
   let selectedId: string | null = $state(null);
@@ -330,6 +331,10 @@
     editorText = "";
   }
 
+  function setTool(next: "pen" | "eraser" | "text" | "interact") {
+    tool = tool === next ? "pen" : next;
+  }
+
   function textDown(event: PointerEvent, p: Point) {
     commitText();
     const ordered = [...boxes].reverse();
@@ -362,13 +367,13 @@
     if (!canvas) return;
     colorOpen = false;
     const p = position(event);
-    if (erasing) {
+    if (tool === "eraser") {
       commitText();
       eraseAt(p);
       (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
       return;
     }
-    if (textArmed) {
+    if (tool === "text") {
       textDown(event, p);
       return;
     }
@@ -386,7 +391,7 @@
       // No button held: end any stale gesture (e.g. a pointerup missed
       // outside the canvas) and just track the eraser ring.
       if (drawing || currentStroke || moveDrag || resizeDrag) onUp();
-      if (erasing) eraserPos = position(event);
+      if (tool === "eraser") eraserPos = position(event);
       return;
     }
     const drag = moveDrag;
@@ -419,13 +424,23 @@
       redraw();
       return;
     }
-    if (erasing) {
+    if (tool === "eraser") {
       const p = position(event);
       eraserPos = p;
       eraseAt(p);
       return;
     }
   }
+
+  // In interact mode the page behind receives pointer events, so watch
+  // for an answer being submitted and close the pad afterwards.
+  $effect(() => {
+    if (tool === "interact" && open) {
+      const close = () => onclose();
+      window.addEventListener("submit", close, true);
+      return () => window.removeEventListener("submit", close, true);
+    }
+  });
 
   function onUp() {
     drawing = false;
@@ -454,14 +469,14 @@
   <div class="relative min-h-0 flex-1">
     <canvas
       bind:this={canvas}
-      class="absolute inset-0 h-full w-full touch-none"
+      class="absolute inset-0 h-full w-full touch-none {tool === 'interact' ? 'pointer-events-none' : ''}"
       onpointerdown={onDown}
       onpointermove={onMove}
       onpointerup={onUp}
       onpointercancel={onUp}
       onlostpointercapture={onUp}
     ></canvas>
-    {#if erasing && eraserPos}
+    {#if tool === "eraser" && eraserPos}
       {@const diameter = eraserRadius() * 2}
       <div
         class="pointer-events-none absolute rounded-full border-2 border-dashed border-foreground/70"
@@ -577,26 +592,37 @@
       />
     </div>
     <Button
-      variant={erasing ? "default" : "outline"}
+      variant={tool === "pen" ? "default" : "outline"}
       size="sm"
-      onclick={() => {
-        erasing = !erasing;
-        textArmed = false;
-      }}
-      aria-pressed={erasing}
+      onclick={() => setTool("pen")}
+      aria-pressed={tool === "pen"}
+    >
+      <Pen class="h-4 w-4" /> Pen
+    </Button>
+    <Button
+      variant={tool === "eraser" ? "default" : "outline"}
+      size="sm"
+      onclick={() => setTool("eraser")}
+      aria-pressed={tool === "eraser"}
     >
       <Eraser class="h-4 w-4" /> Eraser
     </Button>
     <Button
-      variant={textArmed ? "default" : "outline"}
+      variant={tool === "text" ? "default" : "outline"}
       size="sm"
-      onclick={() => {
-        textArmed = !textArmed;
-        erasing = false;
-      }}
-      aria-pressed={textArmed}
+      onclick={() => setTool("text")}
+      aria-pressed={tool === "text"}
     >
       <Type class="h-4 w-4" /> Text
+    </Button>
+    <Button
+      variant={tool === "interact" ? "default" : "outline"}
+      size="sm"
+      onclick={() => setTool("interact")}
+      aria-pressed={tool === "interact"}
+      title="Scroll, answer and submit on the page behind the sketch"
+    >
+      <Mouse class="h-4 w-4" /> Interact
     </Button>
     <Button variant="outline" size="sm" onclick={clearCanvas}>
       <Trash class="h-4 w-4" /> Clear
