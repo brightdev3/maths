@@ -8,7 +8,17 @@
 
   let { open = true, onclose = () => {} }: { open?: boolean; onclose?: () => void } = $props();
 
+  type Point = { x: number; y: number };
+  type Stroke = { id: string; points: Point[]; color: string; width: number };
+  type StampedText = { id: string; x: number; y: number; text: string; color: string; size: number };
+
   let canvas: HTMLCanvasElement | null = $state(null);
+  // Every line is stored individually so the eraser can remove whole lines.
+  let strokes: Stroke[] = $state([]);
+  let stamps: StampedText[] = $state([]);
+  let currentStroke: Stroke | null = null;
+  let nextId = 1;
+
   let drawing = $state(false);
   let color = $state("#171717");
   let erasing = $state(false);
@@ -24,26 +34,50 @@
     return canvas?.getContext("2d") ?? null;
   }
 
+  function redraw() {
+    const ctx = context();
+    if (!ctx || !canvas) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const stroke of strokes) {
+      if (stroke.points.length === 1) {
+        ctx.beginPath();
+        ctx.fillStyle = stroke.color;
+        ctx.arc(stroke.points[0].x, stroke.points[0].y, stroke.width / 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (stroke.points.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+        for (let i = 1; i < stroke.points.length; i++) ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.width;
+        ctx.stroke();
+      }
+    }
+    ctx.textBaseline = "top";
+    for (const stamp of stamps) {
+      ctx.font = `600 ${stamp.size}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.fillStyle = stamp.color;
+      ctx.fillText(stamp.text, stamp.x, stamp.y);
+    }
+    ctx.restore();
+  }
+
   function sizeCanvas() {
     if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return;
-    const snapshot = canvas.width > 0 ? canvas.toDataURL() : null;
     const ratio = window.devicePixelRatio || 1;
     canvas.width = Math.floor(canvas.clientWidth * ratio);
     canvas.height = Math.floor(canvas.clientHeight * ratio);
     const ctx = context();
     if (!ctx) return;
     ctx.scale(ratio, ratio);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    if (snapshot) {
-      const img = new Image();
-      img.onload = () => {
-        const target = context();
-        if (target && canvas)
-          target.drawImage(img, 0, 0, canvas.clientWidth, canvas.clientHeight);
-      };
-      img.src = snapshot;
-    }
+    redraw();
   }
 
   $effect(() => {
@@ -62,9 +96,39 @@
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
+  function distToSegment(p: Point, a: Point, b: Point) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+    const t = Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  }
+
+  function strokeHit(stroke: Stroke, p: Point, threshold: number) {
+    if (stroke.points.length === 1) {
+      return Math.hypot(p.x - stroke.points[0].x, p.y - stroke.points[0].y) <= threshold;
+    }
+    for (let i = 1; i < stroke.points.length; i++) {
+      if (distToSegment(p, stroke.points[i - 1], stroke.points[i]) <= threshold) return true;
+    }
+    return false;
+  }
+
+  function eraseAt(p: Point) {
+    const before = strokes.length;
+    strokes = strokes.filter((stroke) => !strokeHit(stroke, p, Math.max(10, stroke.width / 2 + 6)));
+    if (strokes.length !== before) redraw();
+  }
+
   function startStroke(event: PointerEvent) {
     const ctx = context();
     if (!ctx || !canvas) return;
+    if (erasing) {
+      eraseAt(position(event));
+      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      return;
+    }
     if (textArmed && !editor) {
       const { x, y } = position(event);
       editorText = "";
@@ -75,38 +139,39 @@
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
     drawing = true;
     const { x, y } = position(event);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + 0.01, y + 0.01);
-    ctx.globalCompositeOperation = erasing ? "destination-out" : "source-over";
-    ctx.strokeStyle = color;
-    ctx.lineWidth = erasing ? lineWidth * 3 : lineWidth;
-    ctx.stroke();
+    currentStroke = { id: `s-${nextId++}`, points: [{ x, y }], color, width: lineWidth };
+    strokes.push(currentStroke);
+    redraw();
   }
 
   function continueStroke(event: PointerEvent) {
-    if (!drawing) return;
-    const ctx = context();
-    if (!ctx) return;
-    const { x, y } = position(event);
-    ctx.lineTo(x, y);
-    ctx.globalCompositeOperation = erasing ? "destination-out" : "source-over";
-    ctx.strokeStyle = color;
-    ctx.lineWidth = erasing ? lineWidth * 3 : lineWidth;
-    ctx.stroke();
+    if (erasing) {
+      if (event.buttons > 0) eraseAt(position(event));
+      return;
+    }
+    if (!drawing || !currentStroke) return;
+    currentStroke.points.push(position(event));
+    redraw();
+  }
+
+  function endStroke() {
+    drawing = false;
+    currentStroke = null;
   }
 
   function commitText() {
-    const ctx = context();
-    if (ctx && editor && editorText.trim()) {
-      const size = 14 + lineWidth * 2;
-      ctx.save();
-      ctx.globalCompositeOperation = "source-over";
-      ctx.font = `600 ${size}px ui-sans-serif, system-ui, sans-serif`;
-      ctx.textBaseline = "top";
-      ctx.fillStyle = color;
-      ctx.fillText(editorText.trim(), editor.x, editor.y);
-      ctx.restore();
+    if (!editor) return;
+    const text = editorText.trim();
+    if (text) {
+      stamps.push({
+        id: `t-${nextId++}`,
+        x: editor.x,
+        y: editor.y,
+        text,
+        color,
+        size: 14 + lineWidth * 2
+      });
+      redraw();
     }
     editor = null;
     editorText = "";
@@ -122,12 +187,11 @@
   });
 
   function clearCanvas() {
-    const ctx = context();
-    if (!ctx || !canvas) return;
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
+    strokes = [];
+    stamps = [];
+    editor = null;
+    editorText = "";
+    redraw();
   }
 </script>
 
@@ -143,9 +207,9 @@
       class="absolute inset-0 h-full w-full touch-none {textArmed ? 'cursor-text' : 'cursor-crosshair'}"
       onpointerdown={startStroke}
       onpointermove={continueStroke}
-      onpointerup={() => (drawing = false)}
-      onpointercancel={() => (drawing = false)}
-      onpointerleave={() => (drawing = false)}
+      onpointerup={endStroke}
+      onpointercancel={endStroke}
+      onpointerleave={endStroke}
     ></canvas>
     {#if editor}
       <input
