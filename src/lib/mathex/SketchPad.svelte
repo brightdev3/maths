@@ -3,6 +3,7 @@
   import { Label } from "$lib/components/ui/label";
   import Eraser from "@lucide/svelte/icons/eraser";
   import Trash from "@lucide/svelte/icons/trash";
+  import Type from "@lucide/svelte/icons/type";
   import X from "@lucide/svelte/icons/x";
 
   let { open = true, onclose = () => {} }: { open?: boolean; onclose?: () => void } = $props();
@@ -11,7 +12,11 @@
   let drawing = $state(false);
   let color = $state("#171717");
   let erasing = $state(false);
+  let textArmed = $state(false);
   let lineWidth = $state(4);
+  let editor: { x: number; y: number } | null = $state(null);
+  let editorText = $state("");
+  let textInput: HTMLInputElement | null = $state(null);
 
   const colors = ["#171717", "#ffffff", "#dc2626", "#2563eb", "#16a34a", "#9333ea", "#ea580c"];
 
@@ -60,6 +65,13 @@
   function startStroke(event: PointerEvent) {
     const ctx = context();
     if (!ctx || !canvas) return;
+    if (textArmed && !editor) {
+      const { x, y } = position(event);
+      editorText = "";
+      editor = { x, y };
+      return;
+    }
+    if (editor) return;
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
     drawing = true;
     const { x, y } = position(event);
@@ -84,6 +96,31 @@
     ctx.stroke();
   }
 
+  function commitText() {
+    const ctx = context();
+    if (ctx && editor && editorText.trim()) {
+      const size = 14 + lineWidth * 2;
+      ctx.save();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.font = `600 ${size}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textBaseline = "top";
+      ctx.fillStyle = color;
+      ctx.fillText(editorText.trim(), editor.x, editor.y);
+      ctx.restore();
+    }
+    editor = null;
+    editorText = "";
+  }
+
+  function cancelText() {
+    editor = null;
+    editorText = "";
+  }
+
+  $effect(() => {
+    if (editor) textInput?.focus();
+  });
+
   function clearCanvas() {
     const ctx = context();
     if (!ctx || !canvas) return;
@@ -100,8 +137,38 @@
   aria-label="Sketch pad"
   aria-hidden={open ? undefined : "true"}
 >
-  <div class="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 sm:gap-3">
-    <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sketch pad</span>
+  <div class="relative min-h-0 flex-1">
+    <canvas
+      bind:this={canvas}
+      class="absolute inset-0 h-full w-full touch-none {textArmed ? 'cursor-text' : 'cursor-crosshair'}"
+      onpointerdown={startStroke}
+      onpointermove={continueStroke}
+      onpointerup={() => (drawing = false)}
+      onpointercancel={() => (drawing = false)}
+      onpointerleave={() => (drawing = false)}
+    ></canvas>
+    {#if editor}
+      <input
+        bind:this={textInput}
+        bind:value={editorText}
+        maxlength={120}
+        size={Math.max(10, editorText.length + 2)}
+        placeholder="Type…"
+        aria-label="Textbox content"
+        class="absolute max-w-[80vw] rounded border border-primary bg-card px-1.5 py-0.5 shadow-lg outline-none"
+        style="left: {editor.x}px; top: {editor.y}px; color: {color}; font-size: {14 + lineWidth * 2}px;"
+        onkeydown={(e) => {
+          if (e.key === "Enter") commitText();
+          else if (e.key === "Escape") cancelText();
+        }}
+      />
+    {/if}
+  </div>
+  <div
+    class="absolute bottom-4 left-1/2 z-10 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-border bg-card px-2.5 py-1.5 shadow-xl sm:gap-2"
+    role="toolbar"
+    aria-label="Sketch tools"
+  >
     <div class="flex items-center gap-1" role="group" aria-label="Pen colour">
       {#each colors as swatch}
         <button
@@ -115,6 +182,7 @@
           onclick={() => {
             color = swatch;
             erasing = false;
+            textArmed = false;
           }}
         ></button>
       {/each}
@@ -128,31 +196,36 @@
         max={16}
         step={1}
         bind:value={lineWidth}
-        class="h-1 w-20 accent-primary"
+        class="h-1 w-16 accent-primary"
       />
     </div>
     <Button
       variant={erasing ? "default" : "outline"}
       size="sm"
-      onclick={() => (erasing = !erasing)}
+      onclick={() => {
+        erasing = !erasing;
+        textArmed = false;
+      }}
       aria-pressed={erasing}
     >
       <Eraser class="h-4 w-4" /> Eraser
     </Button>
+    <Button
+      variant={textArmed ? "default" : "outline"}
+      size="sm"
+      onclick={() => {
+        textArmed = !textArmed;
+        erasing = false;
+      }}
+      aria-pressed={textArmed}
+    >
+      <Type class="h-4 w-4" /> Text
+    </Button>
     <Button variant="outline" size="sm" onclick={clearCanvas}>
       <Trash class="h-4 w-4" /> Clear
     </Button>
-    <Button size="sm" class="ml-auto" onclick={onclose}>
+    <Button size="sm" onclick={onclose}>
       <X class="h-4 w-4" /> Done
     </Button>
   </div>
-  <canvas
-    bind:this={canvas}
-    class="min-h-0 flex-1 touch-none cursor-crosshair"
-    onpointerdown={startStroke}
-    onpointermove={continueStroke}
-    onpointerup={() => (drawing = false)}
-    onpointercancel={() => (drawing = false)}
-    onpointerleave={() => (drawing = false)}
-  ></canvas>
 </div>
