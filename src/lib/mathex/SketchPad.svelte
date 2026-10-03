@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import { Label } from "$lib/components/ui/label";
   import Eraser from "@lucide/svelte/icons/eraser";
@@ -10,28 +11,120 @@
 
   type Point = { x: number; y: number };
   type Stroke = { id: string; points: Point[]; color: string; width: number };
-  type StampedText = { id: string; x: number; y: number; text: string; color: string; size: number };
+  type TextBox = {
+    id: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    text: string;
+    color: string;
+    fontSize: number;
+  };
+  type EditorState = { id: string | null; x: number; y: number };
+
+  const MIN_W = 60;
+  const MIN_H = 36;
+  const PAD = 6;
+  const BORDER_TOL = 7;
+  const HANDLE_R = 14;
 
   let canvas: HTMLCanvasElement | null = $state(null);
-  // Every line is stored individually so the eraser can remove whole lines.
+  // Every line and textbox is stored individually so they can be
+  // erased, moved, resized and re-edited after the fact.
   let strokes: Stroke[] = $state([]);
-  let stamps: StampedText[] = $state([]);
-  let currentStroke: Stroke | null = null;
+  let boxes: TextBox[] = $state([]);
   let nextId = 1;
 
   let drawing = $state(false);
+  let currentStroke: Stroke | null = null;
   let color = $state("#171717");
+  let colorTouched = false;
+
+  // White ink by default in dark mode so strokes stay visible.
+  function syncDefaultColor() {
+    if (colorTouched) return;
+    try {
+      color = document.documentElement.classList.contains("dark") ? "#ffffff" : "#171717";
+    } catch {
+      // No DOM (SSR): keep the light-mode default.
+    }
+  }
+
+  onMount(() => {
+    syncDefaultColor();
+    const observer = new MutationObserver(syncDefaultColor);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  });
   let erasing = $state(false);
   let textArmed = $state(false);
   let lineWidth = $state(4);
-  let editor: { x: number; y: number } | null = $state(null);
+
+  let selectedId: string | null = $state(null);
+  let editor: EditorState | null = $state(null);
   let editorText = $state("");
-  let textInput: HTMLInputElement | null = $state(null);
+  let textInput: HTMLTextAreaElement | null = $state(null);
+  let editorW = $state(MIN_W);
+  let editorH = $state(MIN_H);
+  let hoverClass = $state("cursor-crosshair");
+  let moveDrag: { id: string; lastX: number; lastY: number } | null = null;
+  let resizeDrag: { id: string; startW: number; startH: number; startX: number; startY: number } | null = null;
 
   const colors = ["#171717", "#ffffff", "#dc2626", "#2563eb", "#16a34a", "#9333ea", "#ea580c"];
 
+  const selectedBox = $derived(boxes.find((b) => b.id === selectedId) ?? null);
+  const editorBox = $derived.by(() => {
+    const ed = editor;
+    if (!ed || !ed.id) return null;
+    return boxes.find((b) => b.id === ed.id) ?? null;
+  });
+  const chromeBox = $derived.by(() => {
+    const box = selectedBox;
+    if (!box) return null;
+    if (editor && editor.id === box.id) {
+      return {
+        x: box.x,
+        y: box.y,
+        w: Math.max(box.w, editorW + PAD * 2),
+        h: Math.max(box.h, editorH + PAD * 2)
+      };
+    }
+    return { x: box.x, y: box.y, w: box.w, h: box.h };
+  });
+
   function context() {
     return canvas?.getContext("2d") ?? null;
+  }
+
+  function fontOf(size: number) {
+    return `600 ${size}px ui-sans-serif, system-ui, sans-serif`;
+  }
+
+  function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+    const lines: string[] = [];
+    for (const para of text.split("\n")) {
+      const words = para.match(/\S+\s*/g) ?? [""];
+      let line = "";
+      for (const word of words) {
+        const trial = line + word;
+        if (line && ctx.measureText(trial).width > maxW) {
+          lines.push(line.replace(/\s+$/, ""));
+          line = word.replace(/^\s+/, "");
+          while (line && ctx.measureText(line).width > maxW) {
+            let cut = line.length;
+            while (cut > 1 && ctx.measureText(line.slice(0, cut)).width > maxW) cut--;
+            cut = Math.max(1, cut);
+            lines.push(line.slice(0, cut));
+            line = line.slice(cut).replace(/^\s+/, "");
+          }
+        } else {
+          line = trial;
+        }
+      }
+      lines.push(line.replace(/\s+$/, ""));
+    }
+    return lines;
   }
 
   function redraw() {
@@ -61,10 +154,13 @@
       }
     }
     ctx.textBaseline = "top";
-    for (const stamp of stamps) {
-      ctx.font = `600 ${stamp.size}px ui-sans-serif, system-ui, sans-serif`;
-      ctx.fillStyle = stamp.color;
-      ctx.fillText(stamp.text, stamp.x, stamp.y);
+    for (const box of boxes) {
+      if (editor && editor.id === box.id) continue;
+      ctx.font = fontOf(box.fontSize);
+      ctx.fillStyle = box.color;
+      const lines = wrapText(ctx, box.text, Math.max(10, box.w - PAD * 2));
+      const lh = box.fontSize * 1.25;
+      lines.forEach((line, i) => ctx.fillText(line, box.x + PAD, box.y + PAD + i * lh));
     }
     ctx.restore();
   }
@@ -91,9 +187,24 @@
     if (open) sizeCanvas();
   });
 
-  function position(event: PointerEvent) {
+  function position(event: PointerEvent): Point {
     const rect = canvas!.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  function insideBox(p: Point, b: TextBox, tol = 0) {
+    return p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol;
+  }
+
+  function onBorder(p: Point, b: TextBox, tol = BORDER_TOL) {
+    if (!insideBox(p, b, tol)) return false;
+    if (!insideBox(p, b, 0)) return true;
+    const edge = Math.min(p.x - b.x, b.x + b.w - p.x, p.y - b.y, b.y + b.h - p.y);
+    return edge <= tol;
+  }
+
+  function onHandle(p: Point, b: TextBox) {
+    return Math.hypot(p.x - (b.x + b.w), p.y - (b.y + b.h)) <= HANDLE_R;
   }
 
   function distToSegment(p: Point, a: Point, b: Point) {
@@ -116,65 +227,95 @@
   }
 
   function eraseAt(p: Point) {
-    const before = strokes.length;
-    strokes = strokes.filter((stroke) => !strokeHit(stroke, p, Math.max(10, stroke.width / 2 + 6)));
-    if (strokes.length !== before) redraw();
-  }
-
-  function startStroke(event: PointerEvent) {
-    const ctx = context();
-    if (!ctx || !canvas) return;
-    if (erasing) {
-      eraseAt(position(event));
-      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
-      return;
-    }
-    if (textArmed && !editor) {
-      const { x, y } = position(event);
+    const strokeHits = new Set(
+      strokes.filter((s) => strokeHit(s, p, Math.max(10, s.width / 2 + 6))).map((s) => s.id)
+    );
+    const boxHits = boxes.filter((b) => insideBox(p, b, 6)).map((b) => b.id);
+    if (strokeHits.size === 0 && boxHits.length === 0) return;
+    strokes = strokes.filter((s) => !strokeHits.has(s.id));
+    boxes = boxes.filter((b) => !boxHits.includes(b.id));
+    if (selectedId && boxHits.includes(selectedId)) selectedId = null;
+    if (editor && editor.id && boxHits.includes(editor.id)) {
+      editor = null;
       editorText = "";
-      editor = { x, y };
-      return;
     }
-    if (editor) return;
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
-    drawing = true;
-    const { x, y } = position(event);
-    currentStroke = { id: `s-${nextId++}`, points: [{ x, y }], color, width: lineWidth };
-    strokes.push(currentStroke);
     redraw();
   }
 
-  function continueStroke(event: PointerEvent) {
-    if (erasing) {
-      if (event.buttons > 0) eraseAt(position(event));
-      return;
+  function fitEditor() {
+    const el = textInput;
+    const ed = editor;
+    if (!el || !ed) return;
+    const existing = ed.id ? (boxes.find((b) => b.id === ed.id) ?? null) : null;
+    if (existing) {
+      el.style.width = `${Math.max(10, existing.w - PAD * 2)}px`;
+      el.style.whiteSpace = "pre-wrap";
+    } else {
+      // A fresh box grows lengthwise with the text until it hits the screen edge.
+      const containerW = canvas?.clientWidth || window.innerWidth;
+      const maxW = Math.max(MIN_W, containerW - ed.x - 12);
+      el.style.width = "auto";
+      el.style.whiteSpace = "pre";
+      const need = el.scrollWidth + 4;
+      if (need >= maxW) {
+        el.style.width = `${maxW}px`;
+        el.style.whiteSpace = "pre-wrap";
+      } else {
+        el.style.width = `${Math.max(MIN_W, need)}px`;
+      }
     }
-    if (!drawing || !currentStroke) return;
-    currentStroke.points.push(position(event));
-    redraw();
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+    editorW = el.offsetWidth;
+    editorH = el.offsetHeight;
   }
 
-  function endStroke() {
-    drawing = false;
-    currentStroke = null;
-  }
+  $effect(() => {
+    if (editor) {
+      editorText;
+      textInput?.focus();
+      fitEditor();
+    }
+  });
 
   function commitText() {
-    if (!editor) return;
-    const text = editorText.trim();
-    if (text) {
-      stamps.push({
-        id: `t-${nextId++}`,
-        x: editor.x,
-        y: editor.y,
-        text,
-        color,
-        size: 14 + lineWidth * 2
-      });
-      redraw();
+    const ed = editor;
+    if (!ed) return;
+    const text = editorText.replace(/\s+$/, "");
+    const existing = ed.id ? (boxes.find((b) => b.id === ed.id) ?? null) : null;
+    if (!text) {
+      // Nothing to stamp: drop a fresh box, leave an edited one as it was.
+      editor = null;
+      editorText = "";
+      return;
+    }
+    const fontSize = existing?.fontSize ?? 14 + lineWidth * 2;
+    const containerW = canvas?.clientWidth || window.innerWidth;
+    let w = existing
+      ? Math.max(existing.w, editorW + PAD * 2)
+      : Math.min(Math.max(editorW + PAD * 2, MIN_W), Math.max(MIN_W, containerW - ed.x - 8));
+    let h = Math.max(existing?.h ?? MIN_H, editorH + PAD * 2, MIN_H);
+    const ctx = context();
+    if (ctx) {
+      ctx.save();
+      ctx.font = fontOf(fontSize);
+      const lines = wrapText(ctx, text, Math.max(10, w - PAD * 2));
+      h = Math.max(h, lines.length * fontSize * 1.25 + PAD * 2);
+      ctx.restore();
+    }
+    if (existing) {
+      existing.text = text;
+      existing.w = w;
+      existing.h = h;
+      selectedId = existing.id;
+    } else {
+      const id = `tb-${Date.now().toString(36)}-${nextId++}`;
+      boxes.push({ id, x: ed.x, y: ed.y, w, h, text, color, fontSize });
+      selectedId = id;
     }
     editor = null;
     editorText = "";
+    redraw();
   }
 
   function cancelText() {
@@ -182,13 +323,118 @@
     editorText = "";
   }
 
-  $effect(() => {
-    if (editor) textInput?.focus();
-  });
+  function textDown(event: PointerEvent, p: Point) {
+    commitText();
+    const ordered = [...boxes].reverse();
+    const sel = selectedBox;
+    if (sel && onHandle(p, sel)) {
+      resizeDrag = { id: sel.id, startW: sel.w, startH: sel.h, startX: p.x, startY: p.y };
+      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      return;
+    }
+    const border = ordered.find((b) => onBorder(p, b));
+    if (border) {
+      selectedId = border.id;
+      moveDrag = { id: border.id, lastX: p.x, lastY: p.y };
+      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      return;
+    }
+    const inner = ordered.find((b) => insideBox(p, b, 0));
+    if (inner) {
+      selectedId = inner.id;
+      editor = { id: inner.id, x: inner.x, y: inner.y };
+      editorText = inner.text;
+      return;
+    }
+    selectedId = null;
+    editor = { id: null, x: p.x, y: p.y };
+    editorText = "";
+  }
+
+  function updateHover(p: Point) {
+    const sel = selectedBox;
+    let cls = "cursor-text";
+    if (sel && onHandle(p, sel)) {
+      cls = "cursor-nwse-resize";
+    } else {
+      const ordered = [...boxes].reverse();
+      if (ordered.some((b) => onBorder(p, b))) cls = "cursor-move";
+      else if (!ordered.some((b) => insideBox(p, b, 0))) cls = "cursor-crosshair";
+    }
+    hoverClass = cls;
+  }
+
+  function onDown(event: PointerEvent) {
+    if (!canvas) return;
+    const p = position(event);
+    if (erasing) {
+      commitText();
+      eraseAt(p);
+      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      return;
+    }
+    if (textArmed) {
+      textDown(event, p);
+      return;
+    }
+    commitText();
+    (event.target as HTMLElement).setPointerCapture(event.pointerId);
+    drawing = true;
+    const stroke: Stroke = { id: `s-${nextId++}`, points: [p], color, width: lineWidth };
+    currentStroke = stroke;
+    strokes.push(stroke);
+    redraw();
+  }
+
+  function onMove(event: PointerEvent) {
+    const drag = moveDrag;
+    if (drag) {
+      const box = boxes.find((b) => b.id === drag.id);
+      if (box) {
+        const p = position(event);
+        box.x += p.x - drag.lastX;
+        box.y += p.y - drag.lastY;
+        drag.lastX = p.x;
+        drag.lastY = p.y;
+        redraw();
+      }
+      return;
+    }
+    const resize = resizeDrag;
+    if (resize) {
+      const box = boxes.find((b) => b.id === resize.id);
+      if (box) {
+        const p = position(event);
+        box.w = Math.max(MIN_W, resize.startW + (p.x - resize.startX));
+        box.h = Math.max(MIN_H, resize.startH + (p.y - resize.startY));
+        if (editor && editor.id === box.id) fitEditor();
+        redraw();
+      }
+      return;
+    }
+    if (drawing && currentStroke) {
+      currentStroke.points.push(position(event));
+      redraw();
+      return;
+    }
+    if (erasing) {
+      if (event.buttons > 0) eraseAt(position(event));
+      return;
+    }
+    if (textArmed && event.buttons === 0) updateHover(position(event));
+  }
+
+  function onUp() {
+    drawing = false;
+    currentStroke = null;
+    moveDrag = null;
+    resizeDrag = null;
+  }
 
   function clearCanvas() {
     strokes = [];
-    stamps = [];
+    boxes = [];
+    selectedId = null;
     editor = null;
     editorText = "";
     redraw();
@@ -204,28 +450,52 @@
   <div class="relative min-h-0 flex-1">
     <canvas
       bind:this={canvas}
-      class="absolute inset-0 h-full w-full touch-none {textArmed ? 'cursor-text' : 'cursor-crosshair'}"
-      onpointerdown={startStroke}
-      onpointermove={continueStroke}
-      onpointerup={endStroke}
-      onpointercancel={endStroke}
-      onpointerleave={endStroke}
+      class="absolute inset-0 h-full w-full touch-none {erasing
+        ? 'cursor-cell'
+        : textArmed
+          ? hoverClass
+          : 'cursor-crosshair'}"
+      onpointerdown={onDown}
+      onpointermove={onMove}
+      onpointerup={onUp}
+      onpointercancel={onUp}
+      onpointerleave={onUp}
     ></canvas>
+    {#if chromeBox}
+      <div
+        class="pointer-events-none absolute"
+        style="left: {chromeBox.x}px; top: {chromeBox.y}px; width: {chromeBox.w}px; height: {chromeBox.h}px;"
+      >
+        <div class="absolute inset-0 rounded-sm border-2 border-dashed border-primary"></div>
+        <div
+          class="absolute -right-2.5 -bottom-2.5 h-5 w-5 rounded-full border-2 border-primary bg-card shadow"
+          title="Drag to resize"
+        ></div>
+      </div>
+    {/if}
     {#if editor}
-      <input
+      {@const size = editorBox ? editorBox.fontSize : 14 + lineWidth * 2}
+      {@const ex = editorBox ? editorBox.x + PAD : editor.x}
+      {@const ey = editorBox ? editorBox.y + PAD : editor.y}
+      <textarea
         bind:this={textInput}
         bind:value={editorText}
-        maxlength={120}
-        size={Math.max(10, editorText.length + 2)}
+        rows={1}
+        maxlength={500}
         placeholder="Type…"
         aria-label="Textbox content"
-        class="absolute max-w-[80vw] rounded border border-primary bg-card px-1.5 py-0.5 shadow-lg outline-none"
-        style="left: {editor.x}px; top: {editor.y}px; color: {color}; font-size: {14 + lineWidth * 2}px;"
+        class="absolute block resize-none overflow-hidden bg-transparent p-0 leading-[1.25] outline-none"
+        style="left: {ex}px; top: {ey}px; color: {editorBox ? editorBox.color : color}; font: 600 {size}px ui-sans-serif, system-ui, sans-serif;"
+        onblur={commitText}
         onkeydown={(e) => {
-          if (e.key === "Enter") commitText();
-          else if (e.key === "Escape") cancelText();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commitText();
+          } else if (e.key === "Escape") {
+            cancelText();
+          }
         }}
-      />
+      ></textarea>
     {/if}
   </div>
   <div
@@ -245,6 +515,7 @@
           aria-pressed={color === swatch && !erasing}
           onclick={() => {
             color = swatch;
+            colorTouched = true;
             erasing = false;
             textArmed = false;
           }}
