@@ -341,7 +341,16 @@
   }
 
   function setTool(next: "pen" | "eraser" | "text" | "interact") {
+    // Switching tools always stamps pending text first, so an open
+    // editor can never strand the pad. Stray blurs (dialogs, devtools)
+    // intentionally leave the text alone.
+    commitText();
     tool = tool === next ? "pen" : next;
+  }
+
+  function doneSketch() {
+    commitText();
+    onclose();
   }
 
   function textDown(event: PointerEvent, p: Point) {
@@ -478,7 +487,9 @@
 </script>
 
 <div
-  class="fixed inset-0 z-50 flex flex-col {open ? '' : 'hidden'}"
+  class="fixed inset-0 z-50 flex flex-col {open ? '' : 'hidden'} {tool === 'interact'
+    ? 'pointer-events-none'
+    : ''}"
   role="dialog"
   aria-label="Sketch pad"
   aria-hidden={open ? undefined : "true"}
@@ -525,9 +536,8 @@
         maxlength={500}
         placeholder="Type…"
         aria-label="Textbox content"
-        class="absolute block resize-none overflow-hidden rounded-sm bg-card p-0 leading-[1.25] shadow-lg outline outline-2 outline-primary/60"
+        class="absolute block resize-none overflow-hidden rounded-sm bg-card p-0 leading-[1.25] shadow-lg outline outline-2 outline-primary/60 pointer-events-auto"
         style="left: {ex}px; top: {ey}px; color: {editorBox ? editorBox.color : color}; font: 600 {size}px ui-sans-serif, system-ui, sans-serif;"
-        onblur={commitText}
         onkeydown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
@@ -540,7 +550,7 @@
     {/if}
   </div>
   <div
-    class="absolute bottom-4 left-1/2 z-10 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-border bg-card px-2.5 py-1.5 shadow-xl sm:gap-2"
+    class="absolute bottom-4 left-1/2 z-10 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-border bg-card px-2.5 py-1.5 shadow-xl sm:gap-2 pointer-events-auto"
     role="toolbar"
     aria-label="Sketch tools"
   >
@@ -644,7 +654,7 @@
     <Button variant="outline" size="sm" onclick={clearCanvas}>
       <Trash class="h-4 w-4" /> Clear
     </Button>
-    <Button size="sm" onclick={onclose}>
+    <Button size="sm" onclick={doneSketch}>
       <X class="h-4 w-4" /> Done
     </Button>
   </div>
