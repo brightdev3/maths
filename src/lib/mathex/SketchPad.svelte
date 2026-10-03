@@ -331,6 +331,15 @@
     editorText = "";
   }
 
+  function capturePointer(target: EventTarget | null, pointerId: number) {
+    try {
+      (target as Element | null)?.setPointerCapture?.(pointerId);
+    } catch {
+      // Synthetic or already-released pointers have nothing to capture;
+      // gestures still work, they just won't be retargeted.
+    }
+  }
+
   function setTool(next: "pen" | "eraser" | "text" | "interact") {
     tool = tool === next ? "pen" : next;
   }
@@ -341,14 +350,14 @@
     const sel = selectedBox;
     if (sel && onHandle(p, sel)) {
       resizeDrag = { id: sel.id, startW: sel.w, startH: sel.h, startX: p.x, startY: p.y };
-      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      capturePointer(event.target, event.pointerId);
       return;
     }
     const border = ordered.find((b) => onBorder(p, b));
     if (border) {
       selectedId = border.id;
       moveDrag = { id: border.id, lastX: p.x, lastY: p.y };
-      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      capturePointer(event.target, event.pointerId);
       return;
     }
     const inner = ordered.find((b) => insideBox(p, b, 0));
@@ -370,7 +379,7 @@
     if (tool === "eraser") {
       commitText();
       eraseAt(p);
-      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      capturePointer(event.target, event.pointerId);
       return;
     }
     if (tool === "text") {
@@ -378,11 +387,13 @@
       return;
     }
     commitText();
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
+    capturePointer(event.target, event.pointerId);
     drawing = true;
-    const stroke: Stroke = { id: `s-${nextId++}`, points: [p], color, width: lineWidth };
-    currentStroke = stroke;
-    strokes.push(stroke);
+    currentStroke = { id: `s-${nextId++}`, points: [p], color, width: lineWidth };
+    strokes.push(currentStroke);
+    // Re-acquire the stored reference: values entering $state can come
+    // back wrapped, so the pre-push object must not be mutated afterwards.
+    currentStroke = strokes[strokes.length - 1];
     redraw();
   }
 
@@ -420,8 +431,14 @@
       return;
     }
     if (drawing && currentStroke) {
-      currentStroke.points.push(position(event));
-      redraw();
+      // Re-resolve the stored stroke every move: the held reference can
+      // detach from what $state actually stores.
+      const stored = strokes.find((s) => s.id === currentStroke!.id);
+      if (stored) {
+        currentStroke = stored;
+        stored.points.push(position(event));
+        redraw();
+      }
       return;
     }
     if (tool === "eraser") {
