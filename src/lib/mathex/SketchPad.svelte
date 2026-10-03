@@ -67,7 +67,8 @@
   let textInput: HTMLTextAreaElement | null = $state(null);
   let editorW = $state(MIN_W);
   let editorH = $state(MIN_H);
-  let hoverClass = $state("cursor-crosshair");
+  let colorOpen = $state(false);
+  let eraserPos: Point | null = $state(null);
   let moveDrag: { id: string; lastX: number; lastY: number } | null = null;
   let resizeDrag: { id: string; startW: number; startH: number; startX: number; startY: number } | null = null;
 
@@ -226,11 +227,17 @@
     return false;
   }
 
+  // Eraser disc radius. A stroke is erased when the disc touches it.
+  function eraserRadius() {
+    return lineWidth * 1.5;
+  }
+
   function eraseAt(p: Point) {
+    const radius = eraserRadius();
     const strokeHits = new Set(
-      strokes.filter((s) => strokeHit(s, p, Math.max(10, s.width / 2 + 6))).map((s) => s.id)
+      strokes.filter((s) => strokeHit(s, p, radius + s.width / 2)).map((s) => s.id)
     );
-    const boxHits = boxes.filter((b) => insideBox(p, b, 6)).map((b) => b.id);
+    const boxHits = boxes.filter((b) => insideBox(p, b, radius)).map((b) => b.id);
     if (strokeHits.size === 0 && boxHits.length === 0) return;
     strokes = strokes.filter((s) => !strokeHits.has(s.id));
     boxes = boxes.filter((b) => !boxHits.includes(b.id));
@@ -351,21 +358,9 @@
     editorText = "";
   }
 
-  function updateHover(p: Point) {
-    const sel = selectedBox;
-    let cls = "cursor-text";
-    if (sel && onHandle(p, sel)) {
-      cls = "cursor-nwse-resize";
-    } else {
-      const ordered = [...boxes].reverse();
-      if (ordered.some((b) => onBorder(p, b))) cls = "cursor-move";
-      else if (!ordered.some((b) => insideBox(p, b, 0))) cls = "cursor-crosshair";
-    }
-    hoverClass = cls;
-  }
-
   function onDown(event: PointerEvent) {
     if (!canvas) return;
+    colorOpen = false;
     const p = position(event);
     if (erasing) {
       commitText();
@@ -418,10 +413,10 @@
       return;
     }
     if (erasing) {
-      if (event.buttons > 0) eraseAt(position(event));
+      eraserPos = position(event);
+      if (event.buttons > 0) eraseAt(eraserPos);
       return;
     }
-    if (textArmed && event.buttons === 0) updateHover(position(event));
   }
 
   function onUp() {
@@ -429,6 +424,7 @@
     currentStroke = null;
     moveDrag = null;
     resizeDrag = null;
+    eraserPos = null;
   }
 
   function clearCanvas() {
@@ -450,17 +446,22 @@
   <div class="relative min-h-0 flex-1">
     <canvas
       bind:this={canvas}
-      class="absolute inset-0 h-full w-full touch-none {erasing
-        ? 'cursor-cell'
-        : textArmed
-          ? hoverClass
-          : 'cursor-crosshair'}"
+      class="absolute inset-0 h-full w-full touch-none"
       onpointerdown={onDown}
       onpointermove={onMove}
       onpointerup={onUp}
       onpointercancel={onUp}
       onpointerleave={onUp}
     ></canvas>
+    {#if erasing && eraserPos}
+      {@const diameter = eraserRadius() * 2}
+      <div
+        class="pointer-events-none absolute rounded-full border-2 border-dashed border-foreground/70"
+        style="left: {eraserPos.x - eraserRadius()}px; top: {eraserPos.y -
+          eraserRadius()}px; width: {diameter}px; height: {diameter}px;"
+        aria-hidden="true"
+      ></div>
+    {/if}
     {#if chromeBox}
       <div
         class="pointer-events-none absolute"
@@ -503,24 +504,57 @@
     role="toolbar"
     aria-label="Sketch tools"
   >
-    <div class="flex items-center gap-1" role="group" aria-label="Pen colour">
-      {#each colors as swatch}
-        <button
-          type="button"
-          class="h-6 w-6 rounded-full border-2 {color === swatch && !erasing
-            ? 'border-primary'
-            : 'border-border'}"
-          style="background-color: {swatch};"
-          aria-label="Pen colour {swatch}"
-          aria-pressed={color === swatch && !erasing}
-          onclick={() => {
-            color = swatch;
-            colorTouched = true;
-            erasing = false;
-            textArmed = false;
-          }}
-        ></button>
-      {/each}
+    <div class="relative">
+      <button
+        type="button"
+        class="block h-8 w-8 rounded-full border-2 border-border shadow-inner"
+        style="background-color: {color};"
+        aria-label="Pen colour, currently {color}"
+        aria-haspopup="true"
+        aria-expanded={colorOpen}
+        onclick={() => (colorOpen = !colorOpen)}
+      ></button>
+      {#if colorOpen}
+        <div
+          class="absolute bottom-10 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-xl border border-border bg-card p-2 shadow-xl"
+          role="group"
+          aria-label="Choose pen colour"
+        >
+          {#each colors as swatch}
+            <button
+              type="button"
+              class="h-6 w-6 shrink-0 rounded-full border-2 {color === swatch
+                ? 'border-primary'
+                : 'border-border'}"
+              style="background-color: {swatch};"
+              aria-label="Pen colour {swatch}"
+              aria-pressed={color === swatch}
+              onclick={() => {
+                color = swatch;
+                colorTouched = true;
+                colorOpen = false;
+              }}
+            ></button>
+          {/each}
+          <label
+            class="relative h-6 w-6 shrink-0 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-muted-foreground"
+            title="Custom colour"
+          >
+            <span class="sr-only">Custom colour</span>
+            <input
+              type="color"
+              value={color}
+              class="absolute inset-0 h-full w-full cursor-pointer opacity-100"
+              aria-label="Custom colour"
+              oninput={(e) => {
+                color = e.currentTarget.value;
+                colorTouched = true;
+              }}
+              onchange={() => (colorOpen = false)}
+            />
+          </label>
+        </div>
+      {/if}
     </div>
     <div class="flex items-center gap-1.5">
       <Label for="sketch-width" class="text-xs text-muted-foreground">Size</Label>
