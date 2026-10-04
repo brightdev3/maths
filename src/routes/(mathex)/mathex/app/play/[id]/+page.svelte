@@ -287,10 +287,7 @@
       toast.error("Enter an answer first");
       return;
     }
-    socket.emit(
-      "answer",
-      Array.isArray(submittedAnswer) ? (submittedAnswer as (string | number)[]) : submittedAnswer
-    );
+    socket.emit("answer", Array.isArray(submittedAnswer) ? (submittedAnswer as (string | number)[]) : submittedAnswer);
   }
 
   function executeSkip() {
@@ -408,7 +405,8 @@
         </div>
         {#if endsInMs !== null}
           <div class="flex items-center gap-3">
-            <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            <span
+              class="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400"
               ><Hourglass class="h-4 w-4" /></span
             >
             <div>
@@ -433,14 +431,15 @@
       {#if roomSettings?.showLeaderboard !== false || roomSettings?.allowCalculator !== false || roomSettings?.allowChat === true || roomSettings?.allowSketch !== false}
         <div class="mt-3 flex flex-wrap gap-2">
           {#if roomSettings?.showLeaderboard !== false}
-          <Button
-            variant={sidePanel === "leaderboard" ? "default" : "outline"}
-            size="sm"
-            onclick={() => (sidePanel = sidePanel === "leaderboard" ? null : "leaderboard")}
-            aria-pressed={sidePanel === "leaderboard"}
-          >
-            <Trophy class="h-4 w-4" /> {sidePanel === "leaderboard" ? "Hide standings" : "Standings"}
-          </Button>
+            <Button
+              variant={sidePanel === "leaderboard" ? "default" : "outline"}
+              size="sm"
+              onclick={() => (sidePanel = sidePanel === "leaderboard" ? null : "leaderboard")}
+              aria-pressed={sidePanel === "leaderboard"}
+            >
+              <Trophy class="h-4 w-4" />
+              {sidePanel === "leaderboard" ? "Hide standings" : "Standings"}
+            </Button>
           {/if}
           {#if roomSettings?.allowChat === true}
             <Button
@@ -454,7 +453,9 @@
             >
               <MessageCircle class="h-4 w-4" /> Chat
               {#if chatUnread > 0}
-                <span class="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[0.65rem] font-bold text-destructive-foreground">
+                <span
+                  class="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[0.65rem] font-bold text-destructive-foreground"
+                >
                   {chatUnread > 99 ? "99+" : chatUnread}
                 </span>
               {/if}
@@ -485,94 +486,94 @@
 
       <div class="mt-4 grid items-start gap-4 {sidePanel ? 'lg:grid-cols-[minmax(0,1fr)_300px]' : ''}">
         <div class="min-w-0">
-      {#if running}
-        <div class="mathex-panel rounded-3xl p-7 text-center sm:p-9">
-          {#if answerFeedback === "correct"}
-            <div
-              class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-            >
-              <CircleCheckBig class="h-9 w-9" />
-            </div>
-            <p class="mathex-kicker mt-5 text-emerald-600 dark:text-emerald-400">Correct answer</p>
-            <Header size="h3" class="mt-1 text-3xl">Excellent work.</Header>
-            <p class="mt-2 text-sm text-muted-foreground">Loading your next question...</p>
-          {:else if answerFeedback === "wrong"}
-            <div
-              class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"
-            >
-              <CircleX class="h-9 w-9" />
-            </div>
-            <p class="mathex-kicker mt-5 text-destructive">Not quite</p>
-            <Header size="h3" class="mt-1 text-3xl">Try again.</Header>
-            <p class="mt-2 text-sm text-muted-foreground">The question will reopen in a moment.</p>
-          {:else}
-            <p class="mathex-kicker">Answer received</p>
-            <Header size="h3" class="mt-1">Checking your work...</Header>
-            <div class="mt-4 flex items-center gap-3">
-              <LoaderCircle class="h-5 w-5 animate-spin text-primary" />
-              <Progress value={runningVisible} class="*:transition-none" />
-            </div>
-          {/if}
-        </div>
-      {:else}
-        <div class="mathex-panel mt-4 rounded-3xl p-6 sm:p-9">
-          <div class="mb-7 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
-            <Flag class="h-3.5 w-3.5" /> Problem {currentQuestion.number}
-          </div>
-          <div class="question-content prose prose-slate max-w-none dark:prose-invert">
-            {@html renderMath(currentQuestion.content)}
-          </div>
-          <form
-            class="mt-6"
-            onsubmit={(e) => {
-              e.preventDefault();
-              submitAnswer();
-            }}
-          >
-            <div>
-              {#if currentQuestion.requireAllSolutionGroups}
-                <div class="grid gap-4">
-                  {#each currentQuestion.answerGroups as answerGroup, index}
-                    <div class="grid gap-1.5">
-                      <Label>Answer {index + 1}</Label>
-                      {#if answerGroup.length === 1 && answerGroup[0] === "number"}
-                        <NumberAnswer bind:answer={answers[index]} />
-                      {:else if answerGroup.length === 1 && answerGroup[0] === "text"}
-                        <TextAnswer bind:answer={answers[index]} />
-                      {:else}
-                        <ExpressionAnswer bind:answer={answers[index]} />
-                      {/if}
-                    </div>
-                  {/each}
+          {#if running}
+            <div class="mathex-panel rounded-3xl p-7 text-center sm:p-9">
+              {#if answerFeedback === "correct"}
+                <div
+                  class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                >
+                  <CircleCheckBig class="h-9 w-9" />
                 </div>
-              {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "number"}
-                <NumberAnswer bind:answer />
-              {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "text"}
-                <TextAnswer bind:answer />
-              {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "expression"}
-                <ExpressionAnswer bind:answer />
+                <p class="mathex-kicker mt-5 text-emerald-600 dark:text-emerald-400">Correct answer</p>
+                <Header size="h3" class="mt-1 text-3xl">Excellent work.</Header>
+                <p class="mt-2 text-sm text-muted-foreground">Loading your next question...</p>
+              {:else if answerFeedback === "wrong"}
+                <div
+                  class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"
+                >
+                  <CircleX class="h-9 w-9" />
+                </div>
+                <p class="mathex-kicker mt-5 text-destructive">Not quite</p>
+                <Header size="h3" class="mt-1 text-3xl">Try again.</Header>
+                <p class="mt-2 text-sm text-muted-foreground">The question will reopen in a moment.</p>
               {:else}
-                <ExpressionAnswer bind:answer />
+                <p class="mathex-kicker">Answer received</p>
+                <Header size="h3" class="mt-1">Checking your work...</Header>
+                <div class="mt-4 flex items-center gap-3">
+                  <LoaderCircle class="h-5 w-5 animate-spin text-primary" />
+                  <Progress value={runningVisible} class="*:transition-none" />
+                </div>
               {/if}
             </div>
-            <div class="mt-4">
-              <Button
-                type="submit"
-                class="w-full shadow-lg shadow-primary/20"
-                size="lg"
-                disabled={currentQuestion.requireAllSolutionGroups
-                  ? answers.some((value) => value === null || value === "")
-                  : answer === null || answer === ""}>Lock in answer</Button
+          {:else}
+            <div class="mathex-panel mt-4 rounded-3xl p-6 sm:p-9">
+              <div class="mb-7 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+                <Flag class="h-3.5 w-3.5" /> Problem {currentQuestion.number}
+              </div>
+              <div class="question-content prose prose-slate max-w-none dark:prose-invert">
+                {@html renderMath(currentQuestion.content)}
+              </div>
+              <form
+                class="mt-6"
+                onsubmit={(e) => {
+                  e.preventDefault();
+                  submitAnswer();
+                }}
               >
+                <div>
+                  {#if currentQuestion.requireAllSolutionGroups}
+                    <div class="grid gap-4">
+                      {#each currentQuestion.answerGroups as answerGroup, index}
+                        <div class="grid gap-1.5">
+                          <Label>Answer {index + 1}</Label>
+                          {#if answerGroup.length === 1 && answerGroup[0] === "number"}
+                            <NumberAnswer bind:answer={answers[index]} />
+                          {:else if answerGroup.length === 1 && answerGroup[0] === "text"}
+                            <TextAnswer bind:answer={answers[index]} />
+                          {:else}
+                            <ExpressionAnswer bind:answer={answers[index]} />
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                  {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "number"}
+                    <NumberAnswer bind:answer />
+                  {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "text"}
+                    <TextAnswer bind:answer />
+                  {:else if currentQuestion.answerGroups[0]?.length === 1 && currentQuestion.answerGroups[0][0] === "expression"}
+                    <ExpressionAnswer bind:answer />
+                  {:else}
+                    <ExpressionAnswer bind:answer />
+                  {/if}
+                </div>
+                <div class="mt-4">
+                  <Button
+                    type="submit"
+                    class="w-full shadow-lg shadow-primary/20"
+                    size="lg"
+                    disabled={currentQuestion.requireAllSolutionGroups
+                      ? answers.some((value) => value === null || value === "")
+                      : answer === null || answer === ""}>Lock in answer</Button
+                  >
+                </div>
+              </form>
+              {#if currentQuestion.skippable}
+                <Button variant="outline" class="mt-2 w-full gap-2" size="lg" onclick={confirmSkip}>
+                  <CircleMinus class="h-4 w-4" /> Skip question
+                </Button>
+              {/if}
             </div>
-          </form>
-          {#if currentQuestion.skippable}
-            <Button variant="outline" class="mt-2 w-full gap-2" size="lg" onclick={confirmSkip}>
-              <CircleMinus class="h-4 w-4" /> Skip question
-            </Button>
           {/if}
-        </div>
-      {/if}
         </div>
         {#if sidePanel === "leaderboard" && roomSettings?.showLeaderboard !== false}
           <div class="mathex-panel rounded-3xl p-5">
@@ -583,10 +584,7 @@
               {@const myLiveEntry = leaderboard.find((e) => e.name === name)}
               <div class="relative mt-3">
                 {#if myLiveEntry && selfPinned}
-                  <div
-                    class="absolute inset-x-0 z-10 {selfPinned === 'top' ? 'top-0' : 'bottom-0'}"
-                    aria-hidden="true"
-                  >
+                  <div class="absolute inset-x-0 z-10 {selfPinned === 'top' ? 'top-0' : 'bottom-0'}" aria-hidden="true">
                     {@render liveRow(myLiveEntry, true)}
                   </div>
                 {/if}
@@ -609,18 +607,29 @@
             <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
               <MessageCircle class="h-3.5 w-3.5" /> Live chat
             </div>
-            <div
-              bind:this={chatScrollEl}
-              class="mt-3 flex min-h-40 flex-col gap-1.5 overflow-y-auto scrollbar-thin"
-            >
+            <div bind:this={chatScrollEl} class="mt-3 flex min-h-40 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
               {#each chatMessages as message (message.id)}
+                {@const isHostMessage = message.name === "Host"}
                 <div
-                  class="max-w-[85%] rounded-xl px-2.5 py-1.5 {message.name === name
-                    ? 'self-end bg-primary/10'
-                    : 'self-start bg-muted/60'}"
+                  class="max-w-[85%] rounded-xl px-2.5 py-1.5 {isHostMessage
+                    ? 'self-start border border-amber-500/40 bg-amber-500/10'
+                    : message.name === name
+                      ? 'self-end bg-primary/10'
+                      : 'self-start bg-muted/60'}"
                 >
-                  {#if message.name !== name}
-                    <p class="text-[0.65rem] font-bold text-muted-foreground">{message.name}</p>
+                  {#if message.name !== name || isHostMessage}
+                    <p
+                      class="flex items-center gap-1.5 text-[0.65rem] font-bold {isHostMessage
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-muted-foreground'}"
+                    >
+                      {message.name}
+                      {#if isHostMessage}
+                        <span class="rounded bg-amber-500 px-1 py-px text-[0.6rem] font-black tracking-wider text-white"
+                          >HOST</span
+                        >
+                      {/if}
+                    </p>
                   {/if}
                   <p class="text-sm break-words">{message.text}</p>
                 </div>
@@ -647,10 +656,7 @@
     {#if calcOpen && roomSettings?.allowCalculator !== false}
       <Calculator onclose={() => (calcOpen = false)} />
     {/if}
-    <SketchPad
-      open={sketchOpen && roomSettings?.allowSketch !== false}
-      onclose={() => (sketchOpen = false)}
-    />
+    <SketchPad open={sketchOpen && roomSettings?.allowSketch !== false} onclose={() => (sketchOpen = false)} />
   {:else if gameState === "finished"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
       <div class="mathex-panel w-full max-w-md rounded-3xl p-7 text-center sm:p-9">
@@ -709,9 +715,7 @@
   {:else if gameState === "kicked"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
       <div class="mathex-panel w-full max-w-md rounded-3xl p-7 text-center sm:p-9">
-        <div
-          class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"
-        >
+        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
           <UserX class="h-7 w-7" />
         </div>
         <p class="mathex-kicker mt-5 text-destructive">Removed by host</p>
