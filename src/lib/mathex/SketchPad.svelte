@@ -8,7 +8,7 @@
   import Pen from "@lucide/svelte/icons/pen";
   import Undo from "@lucide/svelte/icons/undo";
   import Redo from "@lucide/svelte/icons/redo";
-  import MousePointer from "@lucide/svelte/icons/mouse-pointer";
+  import MousePointer2 from "@lucide/svelte/icons/mouse-pointer-2";
   import X from "@lucide/svelte/icons/x";
 
   let { open = true, onclose = () => {} }: { open?: boolean; onclose?: () => void } = $props();
@@ -44,17 +44,24 @@
   let history: Scene[] = $state([{ strokes: [], boxes: [] }]);
   let historyIndex = $state(0);
 
+  // structuredClone throws on $state proxies (DataCloneError), so scenes
+  // are copied through JSON: the scene is plain data (no functions/DOM).
+  function cloneScene(scene: Scene): Scene {
+    return JSON.parse(JSON.stringify(scene)) as Scene;
+  }
+
   function snapshot() {
-    history = [...history.slice(0, historyIndex + 1), structuredClone({ strokes, boxes })].slice(-50);
+    history = [...history.slice(0, historyIndex + 1), cloneScene({ strokes, boxes })].slice(-50);
     historyIndex = history.length - 1;
   }
 
   function restoreScene(index: number) {
     const scene = history[index];
     if (!scene) return;
+    const copy = cloneScene(scene);
     historyIndex = index;
-    strokes = structuredClone(scene.strokes);
-    boxes = structuredClone(scene.boxes);
+    strokes = copy.strokes;
+    boxes = copy.boxes;
     selectedId = null;
     hoverId = null;
     editor = null;
@@ -444,6 +451,7 @@
       // Clicking anywhere while typing stamps the text instead of
       // starting anything new at the click point.
       commitText();
+      selectedId = null;
       return;
     }
     const ordered = [...boxes].reverse();
@@ -568,7 +576,15 @@
     const p = interactPoint(event);
     if (!p) return;
     const hit = [...boxes].reverse().find((b) => insideBox(p, b, 0));
-    if (!hit) return;
+    if (!hit) {
+      // Clicking away exits the open editor (stamping first) but the
+      // click itself still reaches the page behind.
+      if (editor) {
+        commitText();
+        selectedId = null;
+      }
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     commitText();
@@ -704,36 +720,40 @@
       if (editor) commitText();
     }}
   >
-    <Button
-      size="icon"
-      variant={tool === "interact" ? "default" : "outline"}
-      onclick={() => setTool("interact")}
-      aria-pressed={tool === "interact"}
-      aria-label="Interact with the page"
-      title="Scroll, answer and submit on the page behind the sketch"
-    >
-      <MousePointer class="h-4 w-4" />
-    </Button>
-    <Button
-      size="icon"
-      variant="outline"
-      onclick={undo}
-      disabled={historyIndex <= 0}
-      aria-label="Undo"
-      title="Undo"
-    >
-      <Undo class="h-4 w-4" />
-    </Button>
-    <Button
-      size="icon"
-      variant="outline"
-      onclick={redo}
-      disabled={historyIndex >= history.length - 1}
-      aria-label="Redo"
-      title="Redo"
-    >
-      <Redo class="h-4 w-4" />
-    </Button>
+    <div class="flex items-center gap-0.5">
+      <button
+        type="button"
+        class="flex h-8 w-8 items-center justify-center rounded-full transition-colors {tool === 'interact'
+          ? 'bg-primary text-primary-foreground shadow'
+          : 'text-muted-foreground hover:bg-muted'}"
+        onclick={() => setTool("interact")}
+        aria-pressed={tool === "interact"}
+        aria-label="Interact with the page"
+        title="Scroll, answer and submit on the page behind the sketch"
+      >
+        <MousePointer2 class="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        class="flex h-8 w-8 items-center justify-center rounded-full transition-colors text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+        onclick={undo}
+        disabled={historyIndex <= 0}
+        aria-label="Undo"
+        title="Undo"
+      >
+        <Undo class="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        class="flex h-8 w-8 items-center justify-center rounded-full transition-colors text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+        onclick={redo}
+        disabled={historyIndex >= history.length - 1}
+        aria-label="Redo"
+        title="Redo"
+      >
+        <Redo class="h-4 w-4" />
+      </button>
+    </div>
     <div class="relative">
       <button
         type="button"
