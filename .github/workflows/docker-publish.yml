@@ -139,7 +139,7 @@ jobs:
 
       - name: Trigger Coolify deployment
         run: |
-          response=$(curl -sS -o /dev/null -w "%{http_code}" \
+          response=$(curl -sSL -o /dev/null -w "%{http_code}" \
             -X POST "${{ secrets.COOLIFY_WEBHOOK }}" \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
             -H "Content-Type: application/json" \
