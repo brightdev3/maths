@@ -70,12 +70,14 @@
   let editorH = $state(MIN_H);
   let colorOpen = $state(false);
   let eraserPos: Point | null = $state(null);
+  let hoverId: string | null = $state(null);
   let moveDrag: { id: string; lastX: number; lastY: number } | null = null;
   let resizeDrag: { id: string; startW: number; startH: number; startX: number; startY: number } | null = null;
 
   const colors = ["#171717", "#ffffff", "#dc2626", "#2563eb", "#16a34a", "#9333ea", "#ea580c"];
 
   const selectedBox = $derived(boxes.find((b) => b.id === selectedId) ?? null);
+  const hoverBox = $derived(boxes.find((b) => b.id === hoverId) ?? null);
   const editorBox = $derived.by(() => {
     const ed = editor;
     if (!ed || !ed.id) return null;
@@ -104,27 +106,66 @@
   }
 
   function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
-    const lines: string[] = [];
+    // Break opportunities after whitespace and after punctuation, mirroring
+    // how the browser wraps the editor textarea (e.g. after ! ? ; : , . -).
+    const BREAK_AFTER = new Set(["-", "!", "?", ";", ":", ",", ".", ")", "]", "}", "…", "—", "–", "/"]);
+    const isOpener = (ch: string) => ch === "(" || ch === "[" || ch === "{";
+    const tokens: string[] = [];
     for (const para of text.split("\n")) {
-      const words = para.match(/\S+\s*/g) ?? [""];
-      let line = "";
-      for (const word of words) {
-        const trial = line + word;
-        if (line && ctx.measureText(trial).width > maxW) {
-          lines.push(line.replace(/\s+$/, ""));
-          line = word.replace(/^\s+/, "");
-          while (line && ctx.measureText(line).width > maxW) {
-            let cut = line.length;
-            while (cut > 1 && ctx.measureText(line.slice(0, cut)).width > maxW) cut--;
-            cut = Math.max(1, cut);
-            lines.push(line.slice(0, cut));
-            line = line.slice(cut).replace(/^\s+/, "");
-          }
-        } else {
-          line = trial;
+      for (const part of para.match(/\S+|\s+/g) ?? [""]) {
+        if (/^\s+$/.test(part) || part === "") {
+          tokens.push(part);
+          continue;
         }
+        let cur = "";
+        const chars = [...part];
+        for (let i = 0; i < chars.length; i++) {
+          if (cur && isOpener(chars[i])) {
+            tokens.push(cur);
+            cur = "";
+          }
+          cur += chars[i];
+          const last = i === chars.length - 1;
+          const next = chars[i + 1];
+          if (last || (BREAK_AFTER.has(chars[i]) && next !== undefined && !/\s/.test(next))) {
+            tokens.push(cur);
+            cur = "";
+          }
+        }
+        if (cur) tokens.push(cur);
       }
+      tokens.push("\n");
+    }
+    const lines: string[] = [];
+    let line = "";
+    const pushLine = () => {
       lines.push(line.replace(/\s+$/, ""));
+      line = "";
+    };
+    for (const tok of tokens) {
+      if (tok === "\n") {
+        pushLine();
+        continue;
+      }
+      if (/^\s+$/.test(tok)) {
+        if (line && ctx.measureText(line + tok).width > maxW) {
+          pushLine();
+          continue;
+        }
+        line += tok;
+        continue;
+      }
+      if (line && ctx.measureText(line + tok).width > maxW) pushLine();
+      let rest = tok;
+      while (rest && ctx.measureText(line + rest).width > maxW) {
+        let cut = rest.length;
+        while (cut > 1 && ctx.measureText(line + rest.slice(0, cut)).width > maxW) cut--;
+        cut = Math.max(1, cut);
+        line += rest.slice(0, cut);
+        rest = rest.slice(cut);
+        if (rest) pushLine();
+      }
+      line += rest;
     }
     return lines;
   }
@@ -292,7 +333,12 @@
     const text = editorText.replace(/\s+$/, "");
     const existing = ed.id ? (boxes.find((b) => b.id === ed.id) ?? null) : null;
     if (!text) {
-      // Nothing to stamp: drop a fresh box, leave an edited one as it was.
+      if (existing) {
+        // Clicked away with nothing typed: remove the box entirely.
+        boxes = boxes.filter((b) => b.id !== existing.id);
+        if (selectedId === existing.id) selectedId = null;
+        redraw();
+      }
       editor = null;
       editorText = "";
       return;
@@ -345,6 +391,7 @@
     // editor can never strand the pad. Stray blurs (dialogs, devtools)
     // intentionally leave the text alone.
     commitText();
+    hoverId = null;
     tool = tool === next ? "pen" : next;
   }
 
@@ -354,7 +401,12 @@
   }
 
   function textDown(event: PointerEvent, p: Point) {
-    commitText();
+    if (editor) {
+      // Clicking anywhere while typing stamps the text instead of
+      // starting anything new at the click point.
+      commitText();
+      return;
+    }
     const ordered = [...boxes].reverse();
     const sel = selectedBox;
     if (sel && onHandle(p, sel)) {
@@ -412,6 +464,10 @@
       // outside the canvas) and just track the eraser ring.
       if (drawing || currentStroke || moveDrag || resizeDrag) onUp();
       if (tool === "eraser") eraserPos = position(event);
+      if (tool === "text") {
+        const p = position(event);
+        hoverId = [...boxes].reverse().find((b) => insideBox(p, b, 0))?.id ?? null;
+      }
       return;
     }
     const drag = moveDrag;
@@ -458,13 +514,56 @@
     }
   }
 
+  // In interact mode the canvas ignores pointer events, so the window
+  // listeners below claim clicks that land in a textbox (opening it for
+  // editing) and track hover state; everything else passes through.
+  function interactPoint(event: PointerEvent): Point | null {
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  function interactDown(event: PointerEvent) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if ((event.target as HTMLElement | null)?.closest?.('[role="toolbar"]')) return;
+    const p = interactPoint(event);
+    if (!p) return;
+    const hit = [...boxes].reverse().find((b) => insideBox(p, b, 0));
+    if (!hit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    commitText();
+    selectedId = hit.id;
+    editor = { id: hit.id, x: hit.x, y: hit.y };
+    editorText = hit.text;
+  }
+
+  function interactHover(event: PointerEvent) {
+    if (!canvas || event.buttons !== 0) {
+      hoverId = null;
+      return;
+    }
+    if ((event.target as HTMLElement | null)?.closest?.('[role="toolbar"]')) {
+      hoverId = null;
+      return;
+    }
+    const p = interactPoint(event);
+    hoverId = p ? ([...boxes].reverse().find((b) => insideBox(p, b, 0))?.id ?? null) : null;
+  }
+
   // In interact mode the page behind receives pointer events, so watch
   // for an answer being submitted and close the pad afterwards.
   $effect(() => {
     if (tool === "interact" && open) {
       const close = () => onclose();
       window.addEventListener("submit", close, true);
-      return () => window.removeEventListener("submit", close, true);
+      window.addEventListener("pointerdown", interactDown, true);
+      window.addEventListener("pointermove", interactHover, true);
+      return () => {
+        window.removeEventListener("submit", close, true);
+        window.removeEventListener("pointerdown", interactDown, true);
+        window.removeEventListener("pointermove", interactHover, true);
+      };
     }
   });
 
@@ -480,6 +579,7 @@
     strokes = [];
     boxes = [];
     selectedId = null;
+    hoverId = null;
     editor = null;
     editorText = "";
     redraw();
@@ -525,6 +625,14 @@
         ></div>
       </div>
     {/if}
+    {#if hoverBox && hoverBox.id !== selectedId && (tool === "text" || tool === "interact")}
+      <div
+        class="pointer-events-none absolute"
+        style="left: {hoverBox.x}px; top: {hoverBox.y}px; width: {hoverBox.w}px; height: {hoverBox.h}px;"
+      >
+        <div class="absolute inset-0 rounded-sm border-2 border-dashed border-primary/40"></div>
+      </div>
+    {/if}
     {#if editor}
       {@const size = editorBox ? editorBox.fontSize : 14 + lineWidth * 2}
       {@const ex = editorBox ? editorBox.x + PAD : editor.x}
@@ -534,15 +642,11 @@
         bind:value={editorText}
         rows={1}
         maxlength={500}
-        placeholder="Type…"
         aria-label="Textbox content"
         class="absolute block resize-none overflow-hidden rounded-sm bg-card p-0 leading-[1.25] shadow-lg outline outline-2 outline-primary/60 pointer-events-auto"
-        style="left: {ex}px; top: {ey}px; color: {editorBox ? editorBox.color : color}; font: 600 {size}px ui-sans-serif, system-ui, sans-serif;"
+        style="left: {ex}px; top: {ey}px; color: {editorBox ? editorBox.color : color}; font: 600 {size}px/1.25 ui-sans-serif, system-ui, sans-serif;"
         onkeydown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commitText();
-          } else if (e.key === "Escape") {
+          if (e.key === "Escape") {
             cancelText();
           }
         }}
@@ -553,6 +657,10 @@
     class="absolute bottom-4 left-1/2 z-10 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-border bg-card px-2.5 py-1.5 shadow-xl sm:gap-2 pointer-events-auto"
     role="toolbar"
     aria-label="Sketch tools"
+    tabindex={-1}
+    onpointerdown={() => {
+      if (editor) commitText();
+    }}
   >
     <div class="relative">
       <button
