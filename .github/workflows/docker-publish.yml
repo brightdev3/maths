@@ -136,3 +136,17 @@ jobs:
               "${src}-amd64" \
               "${src}-arm64"
           done
+
+      - name: Trigger Coolify deployment
+        run: |
+          response=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.COOLIFY_WEBHOOK }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"force": true}')
+
+          if [ "$response" -ne 200 ] && [ "$response" -ne 201 ]; then
+            echo "Coolify deployment trigger failed with HTTP $response"
+            exit 1
+          fi
+          echo "Coolify deployment triggered successfully"
