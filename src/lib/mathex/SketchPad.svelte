@@ -6,7 +6,9 @@
   import Trash from "@lucide/svelte/icons/trash";
   import Type from "@lucide/svelte/icons/type";
   import Pen from "@lucide/svelte/icons/pen";
-  import Mouse from "@lucide/svelte/icons/mouse";
+  import Undo from "@lucide/svelte/icons/undo";
+  import Redo from "@lucide/svelte/icons/redo";
+  import MousePointer from "@lucide/svelte/icons/mouse-pointer";
   import X from "@lucide/svelte/icons/x";
 
   let { open = true, onclose = () => {} }: { open?: boolean; onclose?: () => void } = $props();
@@ -37,6 +39,40 @@
   let strokes: Stroke[] = $state([]);
   let boxes: TextBox[] = $state([]);
   let nextId = 1;
+
+  type Scene = { strokes: Stroke[]; boxes: TextBox[] };
+  let history: Scene[] = $state([{ strokes: [], boxes: [] }]);
+  let historyIndex = $state(0);
+
+  function snapshot() {
+    history = [...history.slice(0, historyIndex + 1), structuredClone({ strokes, boxes })].slice(-50);
+    historyIndex = history.length - 1;
+  }
+
+  function restoreScene(index: number) {
+    const scene = history[index];
+    if (!scene) return;
+    historyIndex = index;
+    strokes = structuredClone(scene.strokes);
+    boxes = structuredClone(scene.boxes);
+    selectedId = null;
+    hoverId = null;
+    editor = null;
+    editorText = "";
+    currentStroke = null;
+    drawing = false;
+    moveDrag = null;
+    resizeDrag = null;
+    redraw();
+  }
+
+  function undo() {
+    if (historyIndex > 0) restoreScene(historyIndex - 1);
+  }
+
+  function redo() {
+    if (historyIndex < history.length - 1) restoreScene(historyIndex + 1);
+  }
 
   let drawing = $state(false);
   let currentStroke: Stroke | null = null;
@@ -288,6 +324,7 @@
       editor = null;
       editorText = "";
     }
+    snapshot();
     redraw();
   }
 
@@ -337,6 +374,7 @@
         // Clicked away with nothing typed: remove the box entirely.
         boxes = boxes.filter((b) => b.id !== existing.id);
         if (selectedId === existing.id) selectedId = null;
+        snapshot();
         redraw();
       }
       editor = null;
@@ -369,6 +407,7 @@
     }
     editor = null;
     editorText = "";
+    snapshot();
     redraw();
   }
 
@@ -568,11 +607,13 @@
   });
 
   function onUp() {
+    const finished = (drawing && currentStroke) || moveDrag || resizeDrag;
     drawing = false;
     currentStroke = null;
     moveDrag = null;
     resizeDrag = null;
     eraserPos = null;
+    if (finished) snapshot();
   }
 
   function clearCanvas() {
@@ -582,6 +623,7 @@
     hoverId = null;
     editor = null;
     editorText = "";
+    snapshot();
     redraw();
   }
 </script>
@@ -662,10 +704,40 @@
       if (editor) commitText();
     }}
   >
+    <Button
+      size="icon"
+      variant={tool === "interact" ? "default" : "outline"}
+      onclick={() => setTool("interact")}
+      aria-pressed={tool === "interact"}
+      aria-label="Interact with the page"
+      title="Scroll, answer and submit on the page behind the sketch"
+    >
+      <MousePointer class="h-4 w-4" />
+    </Button>
+    <Button
+      size="icon"
+      variant="outline"
+      onclick={undo}
+      disabled={historyIndex <= 0}
+      aria-label="Undo"
+      title="Undo"
+    >
+      <Undo class="h-4 w-4" />
+    </Button>
+    <Button
+      size="icon"
+      variant="outline"
+      onclick={redo}
+      disabled={historyIndex >= history.length - 1}
+      aria-label="Redo"
+      title="Redo"
+    >
+      <Redo class="h-4 w-4" />
+    </Button>
     <div class="relative">
       <button
         type="button"
-        class="block h-8 w-8 rounded-full border-2 border-border shadow-inner"
+        class="block h-7 w-7 rounded-full border-2 border-border shadow-inner"
         style="background-color: {color};"
         aria-label="Pen colour, currently {color}"
         aria-haspopup="true"
@@ -749,15 +821,6 @@
       aria-pressed={tool === "text"}
     >
       <Type class="h-4 w-4" /> Text
-    </Button>
-    <Button
-      variant={tool === "interact" ? "default" : "outline"}
-      size="sm"
-      onclick={() => setTool("interact")}
-      aria-pressed={tool === "interact"}
-      title="Scroll, answer and submit on the page behind the sketch"
-    >
-      <Mouse class="h-4 w-4" /> Interact
     </Button>
     <Button variant="outline" size="sm" onclick={clearCanvas}>
       <Trash class="h-4 w-4" /> Clear
