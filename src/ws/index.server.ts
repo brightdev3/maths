@@ -138,6 +138,7 @@ export const createWSServer = (base: ServerInstance) => {
       socket.emit("roomSettings", room.settings);
       socket.emit("gameEndsAt", room.endsAt);
       if (room.state === "finished") socket.emit("leaderboard", buildLeaderboard(room));
+      if (room.settings.allowChat && room.chat.length > 0) socket.emit("chatHistory", room.chat);
     });
     socket.on("alertAll", async (type, message) => {
       roomNamespace.emit("alert", type, message);
@@ -204,6 +205,7 @@ export const createWSServer = (base: ServerInstance) => {
       roomManageNamespace.emit("roomSettings", room.settings);
       if (!chatWasAllowed && next.allowChat && room.chat.length > 0) {
         roomNamespace.emit("chatHistory", room.chat);
+        socket.emit("chatHistory", room.chat);
       }
     });
     socket.on("setGameTimer", (minutes) => {
@@ -256,6 +258,24 @@ export const createWSServer = (base: ServerInstance) => {
           setTimeout(() => playerSocket.disconnect(true), 800);
         }
       }
+    });
+    socket.on("sendChat", (text) => {
+      if (!room.settings.allowChat) return;
+      const clean = String(text ?? "")
+        .trim()
+        .slice(0, 500);
+      if (!clean) return;
+      const message = {
+        id: randomBytes(8).toString("hex"),
+        name: "Host",
+        text: clean,
+        timestamp: Date.now()
+      };
+      room.chat.push(message);
+      if (room.chat.length > 200) room.chat = room.chat.slice(-200);
+      saveRoom(room);
+      roomNamespace.emit("chatMessage", message);
+      roomManageNamespace.emit("chatMessage", message);
     });
   });
 
@@ -502,7 +522,9 @@ export const createWSServer = (base: ServerInstance) => {
     });
     socket.on("sendChat", (text) => {
       if (!socket.data.name || !room.settings.allowChat) return;
-      const clean = String(text ?? "").trim().slice(0, 500);
+      const clean = String(text ?? "")
+        .trim()
+        .slice(0, 500);
       if (!clean) return;
       const message = {
         id: randomBytes(8).toString("hex"),
@@ -560,10 +582,13 @@ export const createWSServer = (base: ServerInstance) => {
     clearEndTimer(room.id);
     endTimers.set(
       room.id,
-      setTimeout(() => {
-        endTimers.delete(room.id);
-        void finishRoom(room, "time");
-      }, Math.max(ms, 0))
+      setTimeout(
+        () => {
+          endTimers.delete(room.id);
+          void finishRoom(room, "time");
+        },
+        Math.max(ms, 0)
+      )
     );
   }
 

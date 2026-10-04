@@ -107,6 +107,7 @@ export interface RoomManageClientToServerEvents {
   kick: (playerId: string) => void;
   updateSettings: (settings: Partial<RoomSettings>) => void;
   setGameTimer: (minutes: number | null) => void;
+  sendChat: (text: string) => void;
 }
 
 export interface RoomManageServerToClientEvents {
@@ -119,6 +120,7 @@ export interface RoomManageServerToClientEvents {
   roomSettings: (settings: RoomSettings) => void;
   gameEndsAt: (endsAt: number | null) => void;
   chatMessage: (message: ChatMessage) => void;
+  chatHistory: (messages: ChatMessage[]) => void;
 }
 
 export interface RoomManageInterServerEvents {}

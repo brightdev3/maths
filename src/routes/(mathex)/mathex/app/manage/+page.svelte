@@ -10,7 +10,8 @@
     type RoomSocketData,
     type LogEntry,
     type LeaderboardEntry,
-    type LogVerbosity
+    type LogVerbosity,
+    type ChatMessage
   } from "$lib/mathex/schemas";
 
   import { Input } from "$lib/components/ui/input";
@@ -21,15 +22,14 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import * as Select from "$lib/components/ui/select";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import {
-    CHAT_DISCLAIMER,
-    dismissChatDisclaimer,
-    hasDismissedChatDisclaimer
-  } from "$lib/mathex/chat-disclaimer";
+  import { CHAT_DISCLAIMER, dismissChatDisclaimer, hasDismissedChatDisclaimer } from "$lib/mathex/chat-disclaimer";
   import Identicon from "$lib/components/Identicon.svelte";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Copy from "@lucide/svelte/icons/copy";
+  import MessageCircle from "@lucide/svelte/icons/message-circle";
   import Radio from "@lucide/svelte/icons/radio";
+  import Send from "@lucide/svelte/icons/send";
   import UsersRound from "@lucide/svelte/icons/users-round";
   import UserX from "@lucide/svelte/icons/user-x";
   import Settings from "@lucide/svelte/icons/settings";
@@ -128,6 +128,7 @@
     view?: "list" | "tiles";
     showExtras?: boolean;
     animations?: boolean;
+    panels?: Record<string, boolean>;
   };
   function readHostSettings(): HostSettings {
     try {
@@ -159,6 +160,15 @@
   // Small-screen tab for the list view (players vs everything else).
   let mobileTab: "players" | "extras" = $state("players");
 
+  // Collapsible panels. Everything starts open; hosts can fold panels away.
+  let panelOpen: Record<string, boolean> = $state(initialHostSettings.panels ?? {});
+  function panelIsOpen(key: string): boolean {
+    return panelOpen[key] ?? true;
+  }
+  function togglePanel(key: string) {
+    panelOpen[key] = !panelIsOpen(key);
+  }
+
   $effect(() => {
     try {
       const raw = localStorage.getItem(HOST_SETTINGS_KEY);
@@ -167,6 +177,7 @@
       current.view = viewMode;
       current.showExtras = showExtras;
       current.animations = animations;
+      current.panels = panelOpen;
       localStorage.setItem(HOST_SETTINGS_KEY, JSON.stringify(current));
     } catch {
       // Storage unavailable (e.g. private mode): keep settings in memory only.
@@ -181,7 +192,9 @@
   let filteredLogs = $derived.by(() => {
     if (verbosity === "all") return logs;
     if (verbosity === "submissions")
-      return logs.filter((l) => l.type === "submitted" || l.type === "correct" || l.type === "wrong" || l.type === "skipped");
+      return logs.filter(
+        (l) => l.type === "submitted" || l.type === "correct" || l.type === "wrong" || l.type === "skipped"
+      );
     if (verbosity === "finished")
       return logs.filter(
         (l) => l.type === "finished" || l.type === "correct" || l.type === "wrong" || l.type === "visibility"
@@ -239,6 +252,29 @@
 
   let leaderboard: LeaderboardEntry[] = $state([]);
   socket.on("leaderboard", (data) => (leaderboard = data));
+
+  let chatMessages: ChatMessage[] = $state([]);
+  let chatDraft = $state("");
+  let chatScrollEls: Record<string, HTMLDivElement | null> = $state({});
+  socket.on("chatHistory", (messages) => {
+    chatMessages = messages.slice(-200);
+  });
+  socket.on("chatMessage", (message) => {
+    chatMessages = [...chatMessages, message].slice(-200);
+  });
+  $effect(() => {
+    chatMessages.length;
+    for (const el of Object.values(chatScrollEls)) {
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+  });
+
+  function sendChat() {
+    const text = chatDraft.trim();
+    if (!text) return;
+    socket.emit("sendChat", text.slice(0, 500));
+    chatDraft = "";
+  }
 
   // Two-click confirm for kicking a player.
   let kickArmed: string | null = $state(null);
@@ -379,45 +415,71 @@
 
 {#snippet alertsPanel()}
   <div class="mathex-panel rounded-2xl p-5 sm:p-6">
-    <Header size="h2">Alerts</Header>
-    <form
-      class="mt-4 flex w-full flex-col gap-3 sm:flex-row"
-      onsubmit={(e) => {
-        e.preventDefault();
-        if (alertType === undefined) {
-          toast.error("Choose an alert type!");
-          return;
-        }
-        if (!alertText) {
-          toast.error("Write some alert text!");
-          return;
-        }
-        socket.emit("alertAll", alertType, alertText);
-        alertText = "";
-      }}
+    <button
+      type="button"
+      onclick={() => togglePanel("alerts")}
+      aria-expanded={panelIsOpen("alerts")}
+      class="flex w-full items-center justify-between gap-2 text-left"
     >
-      <Select.Root type="single" bind:value={alertType}>
-        <Select.Trigger class="w-full sm:w-[180px]">
-          {alertType ? alertType.charAt(0).toUpperCase() + alertType.substring(1).toLowerCase() : "Alert Type"}
-        </Select.Trigger>
-        <Select.Content>
-          {#each alertTypes as type}
-            <Select.Item value={type}>{type.charAt(0).toUpperCase() + type.substring(1).toLowerCase()}</Select.Item>
-          {/each}
-        </Select.Content>
-      </Select.Root>
-      <Input bind:value={alertText} class="flex-1" placeholder="Alert Text" />
-      <Button type="submit">Send</Button>
-    </form>
+      <Header size="h2">Alerts</Header>
+      <ChevronDown
+        class="h-4 w-4 shrink-0 text-muted-foreground transition-transform {panelIsOpen('alerts') ? '' : '-rotate-90'}"
+      />
+    </button>
+    {#if panelIsOpen("alerts")}
+      <div transition:slide={slideParams}>
+        <form
+          class="mt-4 flex w-full flex-col gap-3 sm:flex-row"
+          onsubmit={(e) => {
+            e.preventDefault();
+            if (alertType === undefined) {
+              toast.error("Choose an alert type!");
+              return;
+            }
+            if (!alertText) {
+              toast.error("Write some alert text!");
+              return;
+            }
+            socket.emit("alertAll", alertType, alertText);
+            alertText = "";
+          }}
+        >
+          <Select.Root type="single" bind:value={alertType}>
+            <Select.Trigger class="w-full sm:w-[180px]">
+              {alertType ? alertType.charAt(0).toUpperCase() + alertType.substring(1).toLowerCase() : "Alert Type"}
+            </Select.Trigger>
+            <Select.Content>
+              {#each alertTypes as type}
+                <Select.Item value={type}>{type.charAt(0).toUpperCase() + type.substring(1).toLowerCase()}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+          <Input bind:value={alertText} class="flex-1" placeholder="Alert Text" />
+          <Button type="submit">Send</Button>
+        </form>
+      </div>
+    {/if}
   </div>
 {/snippet}
 
 {#snippet leaderboardPanel()}
   {#if currentState === "finished" && leaderboard.length > 0}
     <div class="mathex-panel rounded-2xl p-5 sm:p-6">
-      <div class="flex items-center justify-between">
-        <Header size="h2">Leaderboard</Header>
-        <div class="flex items-center gap-2">
+      <div class="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onclick={() => togglePanel("leaderboard")}
+          aria-expanded={panelIsOpen("leaderboard")}
+          class="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+        >
+          <Header size="h2">Leaderboard</Header>
+          <ChevronDown
+            class="h-4 w-4 shrink-0 text-muted-foreground transition-transform {panelIsOpen('leaderboard')
+              ? ''
+              : '-rotate-90'}"
+          />
+        </button>
+        <div class="flex shrink-0 items-center gap-2">
           <Select.Root type="single" bind:value={exportFormat}>
             <Select.Trigger class="w-[80px]">
               {exportFormat.toUpperCase()}
@@ -430,173 +492,276 @@
           <Button variant="outline" size="sm" onclick={exportScores}>Export</Button>
         </div>
       </div>
-      <div class="mt-4 flex max-h-64 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
-        {#each leaderboard as entry}
-          <div class="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 p-2.5">
-            <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold {entry.rank ===
-              1
-                ? 'bg-yellow-400 text-yellow-900'
-                : entry.rank === 2
-                  ? 'bg-gray-300 text-gray-700'
-                  : entry.rank === 3
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-muted text-muted-foreground'}"
-            >
-              {entry.rank}
-            </div>
-            <Identicon className="w-8 h-8 shrink-0" seed={entry.name} />
-            <div class="min-w-0 flex-1">
-              <span class="truncate text-sm font-medium">{entry.name}</span>
-            </div>
-            {#if entry.visibilityFlags > 0}
-              <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                <TriangleAlert class="h-3.5 w-3.5" />
-                {entry.visibilityFlags}
-              </span>
-            {/if}
-            <div class="shrink-0 text-right">
-              <span class="text-lg font-black tabular-nums">{leaderboardScore(entry)}</span>
-              <span class="ml-1 text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground"
-                >{scoreTimesFive ? "pts" : "correct"}</span
-              >
-              <div class="text-xs text-muted-foreground">
-                {entry.totalMs !== null ? msToMinutesAndSeconds(entry.totalMs) : "DNF"} &middot; {entry.questionsCompleted}/{entry.totalQuestions}
+      {#if panelIsOpen("leaderboard")}
+        <div transition:slide={slideParams}>
+          <div class="mt-4 flex max-h-64 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
+            {#each leaderboard as entry}
+              <div class="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 p-2.5">
+                <div
+                  class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold {entry.rank ===
+                  1
+                    ? 'bg-yellow-400 text-yellow-900'
+                    : entry.rank === 2
+                      ? 'bg-gray-300 text-gray-700'
+                      : entry.rank === 3
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-muted text-muted-foreground'}"
+                >
+                  {entry.rank}
+                </div>
+                <Identicon className="w-8 h-8 shrink-0" seed={entry.name} />
+                <div class="min-w-0 flex-1">
+                  <span class="truncate text-sm font-medium">{entry.name}</span>
+                </div>
+                {#if entry.visibilityFlags > 0}
+                  <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                    <TriangleAlert class="h-3.5 w-3.5" />
+                    {entry.visibilityFlags}
+                  </span>
+                {/if}
+                <div class="shrink-0 text-right">
+                  <span class="text-lg font-black tabular-nums">{leaderboardScore(entry)}</span>
+                  <span class="ml-1 text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground"
+                    >{scoreTimesFive ? "pts" : "correct"}</span
+                  >
+                  <div class="text-xs text-muted-foreground">
+                    {entry.totalMs !== null ? msToMinutesAndSeconds(entry.totalMs) : "DNF"} &middot; {entry.questionsCompleted}/{entry.totalQuestions}
+                  </div>
+                </div>
               </div>
-            </div>
+            {/each}
           </div>
-        {/each}
-      </div>
+        </div>
+      {/if}
     </div>
   {/if}
 {/snippet}
 
 {#snippet logsPanel(uid: string)}
-  <Header size="h2">Logs ({filteredLogs.length})</Header>
-  <div class="mt-3">
-    <Select.Root type="single" bind:value={verbosity}>
-      <Select.Trigger class="w-full">
-        {verbosity === "all" ? "All activity" : verbosity === "submissions" ? "Answers" : "Results & tabs"}
-      </Select.Trigger>
-      <Select.Content>
-        <Select.Item value="all">All activity</Select.Item>
-        <Select.Item value="submissions">Answers only</Select.Item>
-        <Select.Item value="finished">Results & tab activity</Select.Item>
-      </Select.Content>
-    </Select.Root>
-  </div>
-  <div
-    class="mt-3 max-h-72 overflow-y-auto rounded-lg border border-border/40 bg-muted/20 p-2 font-mono text-xs scrollbar-thin"
+  <button
+    type="button"
+    onclick={() => togglePanel("logs")}
+    aria-expanded={panelIsOpen("logs")}
+    class="flex w-full items-center justify-between gap-2 text-left"
   >
-    {@render logList()}
+    <Header size="h2">Logs ({filteredLogs.length})</Header>
+    <ChevronDown
+      class="h-4 w-4 shrink-0 text-muted-foreground transition-transform {panelIsOpen('logs') ? '' : '-rotate-90'}"
+    />
+  </button>
+  {#if panelIsOpen("logs")}
+    <div transition:slide={slideParams}>
+      <div class="mt-3">
+        <Select.Root type="single" bind:value={verbosity}>
+          <Select.Trigger class="w-full">
+            {verbosity === "all" ? "All activity" : verbosity === "submissions" ? "Answers" : "Results & tabs"}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="all">All activity</Select.Item>
+            <Select.Item value="submissions">Answers only</Select.Item>
+            <Select.Item value="finished">Results & tab activity</Select.Item>
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div
+        class="mt-3 max-h-72 overflow-y-auto rounded-lg border border-border/40 bg-muted/20 p-2 font-mono text-xs scrollbar-thin"
+      >
+        {@render logList()}
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet hostChatPanel(scrollKey: string)}
+  <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+    <button
+      type="button"
+      onclick={() => togglePanel("chat")}
+      aria-expanded={panelIsOpen("chat")}
+      class="flex w-full items-center justify-between gap-2 text-left"
+    >
+      <span class="flex items-center gap-2">
+        <Header size="h2">Chat</Header>
+        {#if chatMessages.length > 0}
+          <span
+            class="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[0.65rem] font-bold text-primary-foreground"
+          >
+            {chatMessages.length > 99 ? "99+" : chatMessages.length}
+          </span>
+        {/if}
+      </span>
+      <ChevronDown
+        class="h-4 w-4 shrink-0 text-muted-foreground transition-transform {panelIsOpen('chat') ? '' : '-rotate-90'}"
+      />
+    </button>
+    {#if panelIsOpen("chat")}
+      <div transition:slide={slideParams}>
+        <div
+          bind:this={chatScrollEls[scrollKey]}
+          class="mt-3 flex max-h-72 min-h-40 flex-col gap-1.5 overflow-y-auto scrollbar-thin"
+        >
+          {#each chatMessages as message (message.id)}
+            {@const isHostMessage = message.name === "Host"}
+            <div
+              class="max-w-[85%] rounded-xl px-2.5 py-1.5 {isHostMessage
+                ? 'self-end bg-primary/10'
+                : 'self-start bg-muted/60'}"
+            >
+              <p
+                class="flex items-center gap-1.5 text-[0.65rem] font-bold {isHostMessage
+                  ? 'text-primary'
+                  : 'text-muted-foreground'}"
+              >
+                {message.name}
+                {#if isHostMessage}
+                  <span
+                    class="rounded bg-primary px-1 py-px text-[0.6rem] font-black tracking-wider text-primary-foreground"
+                    >HOST</span
+                  >
+                {/if}
+              </p>
+              <p class="text-sm break-words">{message.text}</p>
+            </div>
+          {:else}
+            <p class="text-sm text-muted-foreground">No messages yet. Say hi!</p>
+          {/each}
+        </div>
+        <form
+          class="mt-3 flex gap-2"
+          onsubmit={(e) => {
+            e.preventDefault();
+            sendChat();
+          }}
+        >
+          <Input bind:value={chatDraft} maxlength={500} placeholder="Message players…" class="flex-1" />
+          <Button type="submit" size="icon" aria-label="Send chat message" disabled={!chatDraft.trim()}>
+            <Send class="h-4 w-4" />
+          </Button>
+        </form>
+      </div>
+    {/if}
   </div>
 {/snippet}
 
 {#snippet gameOptionsPanel(uid: string)}
   <div class="mathex-panel rounded-2xl p-5 sm:p-6">
-    <Header size="h2">Game options</Header>
-    {#if roomSettings}
-      <div class="mt-4 space-y-4">
-        <div>
-          <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">End conditions</p>
-          <div class="mt-2 flex items-center gap-2">
-            <Checkbox
-              id="endOnPerfect-{uid}"
-              checked={roomSettings.endOnPerfectScore}
-              onCheckedChange={(checked) => socket.emit("updateSettings", { endOnPerfectScore: checked === true })}
-            />
-            <Label for="endOnPerfect-{uid}" class="cursor-pointer text-sm">End on perfect score</Label>
-          </div>
-          <div class="mt-3 rounded-xl border border-border/60 p-3">
-            {#if currentState === "started"}
-              <p class="text-sm">
-                {#if endsInMs !== null}
-                  Timer ends in <span class="font-bold tabular-nums">{msToMinutesAndSeconds(endsInMs)}</span>
-                {:else}
-                  <span class="text-muted-foreground">No timer running</span>
-                {/if}
-              </p>
-            {:else if roomSettings.gameTimerMs}
-              <p class="text-sm">
-                Timer set: <span class="font-bold tabular-nums"
-                  >{msToMinutesAndSeconds(roomSettings.gameTimerMs)}</span
-                >
-              </p>
-            {:else}
-              <p class="text-sm text-muted-foreground">No timer set</p>
-            {/if}
-            <div class="mt-2 flex gap-2">
-              <Input
-                type="number"
-                min={1}
-                max={180}
-                bind:value={timerMinutes}
-                class="w-24"
-                aria-label="Timer minutes"
-              />
-              <Button size="sm" onclick={() => socket.emit("setGameTimer", timerMinutes)}>Set timer</Button>
-              <Button size="sm" variant="outline" onclick={() => socket.emit("setGameTimer", null)}>Cancel</Button>
-            </div>
-            <p class="mt-1.5 text-xs text-muted-foreground">
-              {currentState === "started"
-                ? "Minutes from now. Overrides the setup timer."
-                : "Applies when the game starts."}
-            </p>
-          </div>
-        </div>
-        <div>
-          <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Access</p>
-          <div class="mt-2 flex items-center gap-2">
-            <Checkbox
-              id="allowLateJoin-{uid}"
-              checked={roomSettings.allowLateJoin}
-              onCheckedChange={(checked) => socket.emit("updateSettings", { allowLateJoin: checked === true })}
-            />
-            <Label for="allowLateJoin-{uid}" class="cursor-pointer text-sm">Allow late joining</Label>
-          </div>
-        </div>
-        <div>
-          <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Player tools</p>
-          <div class="mt-2 space-y-2">
-            <div class="flex items-center gap-2">
-              <Checkbox
-                id="showLeaderboard-{uid}"
-                checked={roomSettings.showLeaderboard}
-                onCheckedChange={(checked) => socket.emit("updateSettings", { showLeaderboard: checked === true })}
-              />
-              <Label for="showLeaderboard-{uid}" class="cursor-pointer text-sm">Live leaderboard</Label>
-            </div>
-            <div class="flex items-center gap-2">
-              <Checkbox
-                id="allowCalculator-{uid}"
-                checked={roomSettings.allowCalculator}
-                onCheckedChange={(checked) => socket.emit("updateSettings", { allowCalculator: checked === true })}
-              />
-              <Label for="allowCalculator-{uid}" class="cursor-pointer text-sm">Calculator</Label>
-            </div>
-            <div class="flex items-center gap-2">
-              {#key chatKey}
+    <button
+      type="button"
+      onclick={() => togglePanel("game")}
+      aria-expanded={panelIsOpen("game")}
+      class="flex w-full items-center justify-between gap-2 text-left"
+    >
+      <Header size="h2">Game options</Header>
+      <ChevronDown
+        class="h-4 w-4 shrink-0 text-muted-foreground transition-transform {panelIsOpen('game') ? '' : '-rotate-90'}"
+      />
+    </button>
+    {#if panelIsOpen("game")}
+      <div transition:slide={slideParams}>
+        {#if roomSettings}
+          <div class="mt-4 space-y-4">
+            <div>
+              <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">End conditions</p>
+              <div class="mt-2 flex items-center gap-2">
                 <Checkbox
-                  id="allowChat-{uid}"
-                  checked={roomSettings.allowChat}
-                  onCheckedChange={(checked) => requestChatToggle(checked === true)}
+                  id="endOnPerfect-{uid}"
+                  checked={roomSettings.endOnPerfectScore}
+                  onCheckedChange={(checked) => socket.emit("updateSettings", { endOnPerfectScore: checked === true })}
                 />
-              {/key}
-              <Label for="allowChat-{uid}" class="cursor-pointer text-sm">Player chat</Label>
+                <Label for="endOnPerfect-{uid}" class="cursor-pointer text-sm">End on perfect score</Label>
+              </div>
+              <div class="mt-3 rounded-xl border border-border/60 p-3">
+                {#if currentState === "started"}
+                  <p class="text-sm">
+                    {#if endsInMs !== null}
+                      Timer ends in <span class="font-bold tabular-nums">{msToMinutesAndSeconds(endsInMs)}</span>
+                    {:else}
+                      <span class="text-muted-foreground">No timer running</span>
+                    {/if}
+                  </p>
+                {:else if roomSettings.gameTimerMs}
+                  <p class="text-sm">
+                    Timer set: <span class="font-bold tabular-nums"
+                      >{msToMinutesAndSeconds(roomSettings.gameTimerMs)}</span
+                    >
+                  </p>
+                {:else}
+                  <p class="text-sm text-muted-foreground">No timer set</p>
+                {/if}
+                <div class="mt-2 flex gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={180}
+                    bind:value={timerMinutes}
+                    class="w-24"
+                    aria-label="Timer minutes"
+                  />
+                  <Button size="sm" onclick={() => socket.emit("setGameTimer", timerMinutes)}>Set timer</Button>
+                  <Button size="sm" variant="outline" onclick={() => socket.emit("setGameTimer", null)}>Cancel</Button>
+                </div>
+                <p class="mt-1.5 text-xs text-muted-foreground">
+                  {currentState === "started"
+                    ? "Minutes from now. Overrides the setup timer."
+                    : "Applies when the game starts."}
+                </p>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <Checkbox
-                id="allowSketch-{uid}"
-                checked={roomSettings.allowSketch}
-                onCheckedChange={(checked) => socket.emit("updateSettings", { allowSketch: checked === true })}
-              />
-              <Label for="allowSketch-{uid}" class="cursor-pointer text-sm">Sketch pad</Label>
+            <div>
+              <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Access</p>
+              <div class="mt-2 flex items-center gap-2">
+                <Checkbox
+                  id="allowLateJoin-{uid}"
+                  checked={roomSettings.allowLateJoin}
+                  onCheckedChange={(checked) => socket.emit("updateSettings", { allowLateJoin: checked === true })}
+                />
+                <Label for="allowLateJoin-{uid}" class="cursor-pointer text-sm">Allow late joining</Label>
+              </div>
+            </div>
+            <div>
+              <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Player tools</p>
+              <div class="mt-2 space-y-2">
+                <div class="flex items-center gap-2">
+                  <Checkbox
+                    id="showLeaderboard-{uid}"
+                    checked={roomSettings.showLeaderboard}
+                    onCheckedChange={(checked) => socket.emit("updateSettings", { showLeaderboard: checked === true })}
+                  />
+                  <Label for="showLeaderboard-{uid}" class="cursor-pointer text-sm">Live leaderboard</Label>
+                </div>
+                <div class="flex items-center gap-2">
+                  <Checkbox
+                    id="allowCalculator-{uid}"
+                    checked={roomSettings.allowCalculator}
+                    onCheckedChange={(checked) => socket.emit("updateSettings", { allowCalculator: checked === true })}
+                  />
+                  <Label for="allowCalculator-{uid}" class="cursor-pointer text-sm">Calculator</Label>
+                </div>
+                <div class="flex items-center gap-2">
+                  {#key chatKey}
+                    <Checkbox
+                      id="allowChat-{uid}"
+                      checked={roomSettings.allowChat}
+                      onCheckedChange={(checked) => requestChatToggle(checked === true)}
+                    />
+                  {/key}
+                  <Label for="allowChat-{uid}" class="cursor-pointer text-sm">Player chat</Label>
+                </div>
+                <div class="flex items-center gap-2">
+                  <Checkbox
+                    id="allowSketch-{uid}"
+                    checked={roomSettings.allowSketch}
+                    onCheckedChange={(checked) => socket.emit("updateSettings", { allowSketch: checked === true })}
+                  />
+                  <Label for="allowSketch-{uid}" class="cursor-pointer text-sm">Sketch pad</Label>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        {:else}
+          <p class="mt-3 text-sm text-muted-foreground">Loading game options…</p>
+        {/if}
       </div>
-    {:else}
-      <p class="mt-3 text-sm text-muted-foreground">Loading game options…</p>
     {/if}
   </div>
 {/snippet}
@@ -609,6 +774,9 @@
     <div class="mathex-panel rounded-2xl p-5 sm:p-6">
       {@render logsPanel(uid)}
     </div>
+    {#if roomSettings?.allowChat === true}
+      {@render hostChatPanel(`extras-${uid}`)}
+    {/if}
   </div>
 {/snippet}
 
@@ -634,14 +802,31 @@
 {#snippet playerListPanel(uid: string)}
   <div class="mathex-panel min-w-0 rounded-2xl p-5 sm:p-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <Header size="h2" class="text-2xl">Players</Header><span
-          class="flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary"
-          ><UsersRound class="h-3.5 w-3.5" />{players.length} joined</span
-        >
-      </div>
+      <button
+        type="button"
+        onclick={() => togglePanel("players")}
+        aria-expanded={panelIsOpen("players")}
+        class="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+      >
+        <span class="flex min-w-0 items-center gap-3">
+          <Header size="h2" class="text-2xl">Players</Header><span
+            class="flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary"
+            ><UsersRound class="h-3.5 w-3.5" />{players.length} joined</span
+          >
+        </span>
+        <ChevronDown
+          class="h-4 w-4 shrink-0 text-muted-foreground transition-transform {panelIsOpen('players')
+            ? ''
+            : '-rotate-90'}"
+        />
+      </button>
       <div class="relative">
-        <Button variant="outline" size="sm" onclick={() => (settingsOpen = !settingsOpen)} aria-label="Display settings">
+        <Button
+          variant="outline"
+          size="sm"
+          onclick={() => (settingsOpen = !settingsOpen)}
+          aria-label="Display settings"
+        >
           <Settings class="h-4 w-4" /> Settings
         </Button>
         {#if settingsOpen}
@@ -649,73 +834,79 @@
         {/if}
       </div>
     </div>
-    <div class="mt-4 flex max-h-[55vh] flex-col gap-2 overflow-y-auto scrollbar-thin lg:max-h-[32rem]">
-      {#each sortedPlayers as player, i (player.playerId ?? player.name)}
-        {@const correct = correctOf(player)}
-        {@const scoreProgress = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0}
-        {@const elapsed =
-          tick >= 0 && player.startingTime ? (player.finishingTime || Date.now()) - player.startingTime : null}
-        <div
-          animate:flip={flipParams}
-          class="flex items-center gap-3 rounded-lg border-2 border-solid p-3 transition-colors {player.startingTime
-            ? player.finishingTime
-              ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
-              : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
-            : 'bg-muted/50 border-border'}"
-        >
-          <div
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold {player.finishingTime
-              ? 'bg-emerald-500 text-white'
-              : player.startingTime
-                ? 'bg-red-500 text-white'
-                : 'bg-muted text-muted-foreground'}"
-          >
-            {i + 1}
-          </div>
-          <Identicon className="w-10 h-10 shrink-0" seed={player.name || "Choosing..."} />
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center justify-between gap-2">
-              <span class="truncate text-sm font-bold">{player.name || "Choosing..."}</span>
-              {#if elapsed !== null}
-                <span class="shrink-0 text-xs tabular-nums text-muted-foreground"
-                  >{msToMinutesAndSeconds(elapsed)}</span
-                >
-              {/if}
-            </div>
-            <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-              {#if currentState === "started" || currentState === "finished"}
-                <span class="font-semibold text-foreground">Q{onQuestion(player)}/{totalQuestions}</span>
-                {#if scoreTimesFive}
-                  <span>{correct} correct</span>
+    {#if panelIsOpen("players")}
+      <div transition:slide={slideParams}>
+        <div class="mt-4 flex max-h-[55vh] flex-col gap-2 overflow-y-auto scrollbar-thin lg:max-h-[32rem]">
+          {#each sortedPlayers as player, i (player.playerId ?? player.name)}
+            {@const correct = correctOf(player)}
+            {@const scoreProgress = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0}
+            {@const elapsed =
+              tick >= 0 && player.startingTime ? (player.finishingTime || Date.now()) - player.startingTime : null}
+            <div
+              animate:flip={flipParams}
+              class="flex items-center gap-3 rounded-lg border-2 border-solid p-3 transition-colors {player.startingTime
+                ? player.finishingTime
+                  ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
+                  : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
+                : 'bg-muted/50 border-border'}"
+            >
+              <div
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold {player.finishingTime
+                  ? 'bg-emerald-500 text-white'
+                  : player.startingTime
+                    ? 'bg-red-500 text-white'
+                    : 'bg-muted text-muted-foreground'}"
+              >
+                {i + 1}
+              </div>
+              <Identicon className="w-10 h-10 shrink-0" seed={player.name || "Choosing..."} />
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="truncate text-sm font-bold">{player.name || "Choosing..."}</span>
+                  {#if elapsed !== null}
+                    <span class="shrink-0 text-xs tabular-nums text-muted-foreground"
+                      >{msToMinutesAndSeconds(elapsed)}</span
+                    >
+                  {/if}
+                </div>
+                <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                  {#if currentState === "started" || currentState === "finished"}
+                    <span class="font-semibold text-foreground">Q{onQuestion(player)}/{totalQuestions}</span>
+                    {#if scoreTimesFive}
+                      <span>{correct} correct</span>
+                    {/if}
+                  {/if}
+                  {#if player.visibilityFlags > 0}
+                    <span
+                      class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"
+                    >
+                      <TriangleAlert class="h-3.5 w-3.5" />
+                      {player.visibilityFlags}
+                    </span>
+                  {/if}
+                  {@render kickButton(player)}
+                </div>
+                {#if currentState === "started" || currentState === "finished"}
+                  <div class="mt-1.5 flex items-center gap-2">
+                    <Progress value={scoreProgress} class="h-2 flex-1" />
+                  </div>
                 {/if}
-              {/if}
-              {#if player.visibilityFlags > 0}
-                <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                  <TriangleAlert class="h-3.5 w-3.5" />
-                  {player.visibilityFlags}
-                </span>
-              {/if}
-              {@render kickButton(player)}
-            </div>
-            {#if currentState === "started" || currentState === "finished"}
-              <div class="mt-1.5 flex items-center gap-2">
-                <Progress value={scoreProgress} class="h-2 flex-1" />
               </div>
-            {/if}
-          </div>
-          {#if currentState === "started" || currentState === "finished"}
-            <div class="shrink-0 text-right" aria-label="{player.name} score {displayScoreOf(player)}">
-              <div class="text-2xl font-black tabular-nums leading-none">{displayScoreOf(player)}</div>
-              <div class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
-                {scoreTimesFive ? "pts" : "correct"}
-              </div>
+              {#if currentState === "started" || currentState === "finished"}
+                <div class="shrink-0 text-right" aria-label="{player.name} score {displayScoreOf(player)}">
+                  <div class="text-2xl font-black tabular-nums leading-none">{displayScoreOf(player)}</div>
+                  <div class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
+                    {scoreTimesFive ? "pts" : "correct"}
+                  </div>
+                </div>
+              {/if}
             </div>
-          {/if}
+          {:else}
+            <p class="italic text-sm text-muted-foreground">No players yet</p>
+          {/each}
         </div>
-      {:else}
-        <p class="italic text-sm text-muted-foreground">No players yet</p>
-      {/each}
-    </div>
+      </div>
+    {/if}
   </div>
 {/snippet}
 
@@ -819,131 +1010,174 @@
               ? '2xl:grid-cols-[minmax(0,1fr)_360px]'
               : ''}"
           >
-      <div class="flex min-w-0 flex-col gap-4">
-        <div class="mathex-panel rounded-2xl p-5 sm:p-6">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
-              <Header size="h2" class="text-2xl">Players</Header><span
-                class="flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary"
-                ><UsersRound class="h-3.5 w-3.5" />{players.length} joined</span
-              >
-            </div>
-            <div class="flex items-center gap-2">
-              <div class="relative">
-                <Button variant="outline" size="sm" onclick={() => (settingsOpen = !settingsOpen)} aria-label="Display settings">
-                  <Settings class="h-4 w-4" /> Settings
-                </Button>
-                {#if settingsOpen}
-                  {@render settingsPanel("tiles")}
+            <div class="flex min-w-0 flex-col gap-4">
+              <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onclick={() => togglePanel("players")}
+                    aria-expanded={panelIsOpen("players")}
+                    class="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+                  >
+                    <span class="flex min-w-0 items-center gap-3">
+                      <Header size="h2" class="text-2xl">Players</Header><span
+                        class="flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary"
+                        ><UsersRound class="h-3.5 w-3.5" />{players.length} joined</span
+                      >
+                    </span>
+                    <ChevronDown
+                      class="h-4 w-4 shrink-0 text-muted-foreground transition-transform {panelIsOpen('players')
+                        ? ''
+                        : '-rotate-90'}"
+                    />
+                  </button>
+                  <div class="flex items-center gap-2">
+                    <div class="relative">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onclick={() => (settingsOpen = !settingsOpen)}
+                        aria-label="Display settings"
+                      >
+                        <Settings class="h-4 w-4" /> Settings
+                      </Button>
+                      {#if settingsOpen}
+                        {@render settingsPanel("tiles")}
+                      {/if}
+                    </div>
+                    {#if showExtras}
+                      <Button variant="outline" size="sm" class="2xl:hidden" onclick={() => (logsOpen = !logsOpen)}>
+                        <ScrollText class="h-4 w-4" />
+                        {logsOpen ? "Hide logs" : "Show logs"} ({filteredLogs.length})
+                      </Button>
+                    {/if}
+                  </div>
+                </div>
+                {#if panelIsOpen("players")}
+                  <div transition:slide={slideParams}>
+                    <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {#each sortedPlayers as player, i (player.playerId ?? player.name)}
+                        {@const correct = correctOf(player)}
+                        {@const scoreProgress = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0}
+                        {@const elapsed =
+                          tick >= 0 && player.startingTime
+                            ? (player.finishingTime || Date.now()) - player.startingTime
+                            : null}
+                        <div
+                          animate:flip={flipParams}
+                          class="flex flex-col gap-2 rounded-xl border-2 border-solid p-3 transition-colors {player.startingTime
+                            ? player.finishingTime
+                              ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
+                              : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
+                            : 'bg-muted/50 border-border'}"
+                        >
+                          <div class="flex items-center gap-2.5">
+                            <div
+                              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold {player.finishingTime
+                                ? 'bg-emerald-500 text-white'
+                                : player.startingTime
+                                  ? 'bg-red-500 text-white'
+                                  : 'bg-muted text-muted-foreground'}"
+                            >
+                              {i + 1}
+                            </div>
+                            <Identicon className="w-10 h-10 shrink-0" seed={player.name || "Choosing..."} />
+                            <div class="min-w-0 flex-1">
+                              <div class="flex items-center justify-between gap-2">
+                                <span class="truncate text-sm font-bold">{player.name || "Choosing..."}</span>
+                                {#if elapsed !== null}
+                                  <span class="shrink-0 text-xs tabular-nums text-muted-foreground"
+                                    >{msToMinutesAndSeconds(elapsed)}</span
+                                  >
+                                {/if}
+                              </div>
+                              <div
+                                class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground"
+                              >
+                                {#if currentState === "started" || currentState === "finished"}
+                                  <span class="font-semibold text-foreground"
+                                    >Q{onQuestion(player)}/{totalQuestions}</span
+                                  >
+                                  {#if scoreTimesFive}
+                                    <span>{correct} correct</span>
+                                  {/if}
+                                {/if}
+                                {#if player.visibilityFlags > 0}
+                                  <span
+                                    class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"
+                                  >
+                                    <TriangleAlert class="h-3.5 w-3.5" />
+                                    {player.visibilityFlags}
+                                  </span>
+                                {/if}
+                                {@render kickButton(player)}
+                              </div>
+                            </div>
+                            {#if currentState === "started" || currentState === "finished"}
+                              <div
+                                class="shrink-0 text-right"
+                                aria-label="{player.name} score {displayScoreOf(player)}"
+                              >
+                                <div class="text-2xl font-black tabular-nums leading-none">
+                                  {displayScoreOf(player)}
+                                </div>
+                                <div class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
+                                  {scoreTimesFive ? "pts" : "correct"}
+                                </div>
+                              </div>
+                            {/if}
+                          </div>
+                          {#if currentState === "started" || currentState === "finished"}
+                            <div class="flex items-center gap-2">
+                              <Progress value={scoreProgress} class="h-2 flex-1" />
+                            </div>
+                          {/if}
+                        </div>
+                      {:else}
+                        <p class="italic text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">No players yet</p>
+                      {/each}
+                    </div>
+                  </div>
                 {/if}
               </div>
+
+              {#if showExtras && logsOpen}
+                <div class="mathex-panel rounded-2xl p-5 sm:p-6 2xl:hidden" transition:slide={slideParams}>
+                  <div class="flex items-center justify-end">
+                    <Button variant="outline" size="sm" onclick={() => (logsOpen = false)} aria-label="Hide logs">
+                      <X class="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div class="mt-2">
+                    {@render logsPanel("tiles-mobile")}
+                  </div>
+                </div>
+              {/if}
+
               {#if showExtras}
-                <Button variant="outline" size="sm" class="2xl:hidden" onclick={() => (logsOpen = !logsOpen)}>
-                  <ScrollText class="h-4 w-4" /> {logsOpen ? "Hide logs" : "Show logs"} ({filteredLogs.length})
-                </Button>
+                <div class="grid items-start gap-4 xl:grid-cols-2" transition:slide={slideParams}>
+                  {@render alertsPanel()}
+                  {@render gameOptionsPanel("tiles")}
+                  {@render leaderboardPanel()}
+                </div>
+                {#if roomSettings?.allowChat === true}
+                  <div class="2xl:hidden">
+                    {@render hostChatPanel("tiles-main")}
+                  </div>
+                {/if}
               {/if}
             </div>
-          </div>
-          <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {#each sortedPlayers as player, i (player.playerId ?? player.name)}
-              {@const correct = correctOf(player)}
-              {@const scoreProgress = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0}
-              {@const elapsed =
-                tick >= 0 && player.startingTime ? (player.finishingTime || Date.now()) - player.startingTime : null}
-              <div
-                animate:flip={flipParams}
-                class="flex flex-col gap-2 rounded-xl border-2 border-solid p-3 transition-colors {player.startingTime
-                  ? player.finishingTime
-                    ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
-                    : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
-                  : 'bg-muted/50 border-border'}"
-              >
-                <div class="flex items-center gap-2.5">
-                  <div
-                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold {player.finishingTime
-                      ? 'bg-emerald-500 text-white'
-                      : player.startingTime
-                        ? 'bg-red-500 text-white'
-                        : 'bg-muted text-muted-foreground'}"
-                  >
-                    {i + 1}
-                  </div>
-                  <Identicon className="w-10 h-10 shrink-0" seed={player.name || "Choosing..."} />
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-center justify-between gap-2">
-                      <span class="truncate text-sm font-bold">{player.name || "Choosing..."}</span>
-                      {#if elapsed !== null}
-                        <span class="shrink-0 text-xs tabular-nums text-muted-foreground"
-                          >{msToMinutesAndSeconds(elapsed)}</span
-                        >
-                      {/if}
-                    </div>
-                    <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                      {#if currentState === "started" || currentState === "finished"}
-                        <span class="font-semibold text-foreground">Q{onQuestion(player)}/{totalQuestions}</span>
-                        {#if scoreTimesFive}
-                          <span>{correct} correct</span>
-                        {/if}
-                      {/if}
-                      {#if player.visibilityFlags > 0}
-                        <span
-                          class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"
-                        >
-                          <TriangleAlert class="h-3.5 w-3.5" />
-                          {player.visibilityFlags}
-                        </span>
-                      {/if}
-                      {@render kickButton(player)}
-                    </div>
-                  </div>
-                  {#if currentState === "started" || currentState === "finished"}
-                    <div class="shrink-0 text-right" aria-label="{player.name} score {displayScoreOf(player)}">
-                      <div class="text-2xl font-black tabular-nums leading-none">{displayScoreOf(player)}</div>
-                      <div class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
-                        {scoreTimesFive ? "pts" : "correct"}
-                      </div>
-                    </div>
-                  {/if}
+
+            {#if showExtras}
+              <div class="hidden flex-col gap-4 2xl:flex" transition:fade={fadeParams}>
+                <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+                  {@render logsPanel("tiles-desktop")}
                 </div>
-                {#if currentState === "started" || currentState === "finished"}
-                  <div class="flex items-center gap-2">
-                    <Progress value={scoreProgress} class="h-2 flex-1" />
-                  </div>
+                {#if roomSettings?.allowChat === true}
+                  {@render hostChatPanel("tiles-side")}
                 {/if}
               </div>
-            {:else}
-              <p class="italic text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">No players yet</p>
-            {/each}
-          </div>
-        </div>
-
-        {#if showExtras && logsOpen}
-          <div class="mathex-panel rounded-2xl p-5 sm:p-6 2xl:hidden" transition:slide={slideParams}>
-            <div class="flex items-center justify-end">
-              <Button variant="outline" size="sm" onclick={() => (logsOpen = false)} aria-label="Hide logs">
-                <X class="h-4 w-4" />
-              </Button>
-            </div>
-            <div class="mt-2">
-              {@render logsPanel("tiles-mobile")}
-            </div>
-          </div>
-        {/if}
-
-        {#if showExtras}
-          <div class="grid items-start gap-4 xl:grid-cols-2" transition:slide={slideParams}>
-            {@render alertsPanel()}
-            {@render gameOptionsPanel("tiles")}
-            {@render leaderboardPanel()}
-          </div>
-        {/if}
-      </div>
-
-      {#if showExtras}
-        <div class="mathex-panel hidden rounded-2xl p-5 sm:p-6 2xl:block" transition:fade={fadeParams}>
-          {@render logsPanel("tiles-desktop")}
-        </div>
-      {/if}
+            {/if}
           </div>
         {/if}
       </div>
