@@ -189,6 +189,16 @@
     if (!showExtras && mobileTab === "extras") mobileTab = "players";
   });
 
+  // Dismiss the display-settings dropdown when clicking anywhere else.
+  $effect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if ((event.target as HTMLElement | null)?.closest?.("[data-settings-wrap]")) return;
+      if (settingsOpen) settingsOpen = false;
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  });
+
   let filteredLogs = $derived.by(() => {
     if (verbosity === "all") return logs;
     if (verbosity === "submissions")
@@ -262,6 +272,9 @@
   socket.on("chatMessage", (message) => {
     chatMessages = [...chatMessages, message].slice(-200);
   });
+  socket.on("chatDelete", (id) => {
+    chatMessages = chatMessages.filter((message) => message.id !== id);
+  });
   $effect(() => {
     chatMessages.length;
     for (const el of Object.values(chatScrollEls)) {
@@ -276,21 +289,23 @@
     chatDraft = "";
   }
 
-  // Two-click confirm for kicking a player.
-  let kickArmed: string | null = $state(null);
-  let kickArmTimer: ReturnType<typeof setTimeout> | null = null;
-  function askKick(playerId: string | null) {
-    if (!playerId) return;
-    if (kickArmed === playerId) {
-      if (kickArmTimer) clearTimeout(kickArmTimer);
-      kickArmed = null;
-      socket.emit("kick", playerId);
-      toast.success("Player kicked");
-    } else {
-      if (kickArmTimer) clearTimeout(kickArmTimer);
-      kickArmed = playerId;
-      kickArmTimer = setTimeout(() => (kickArmed = null), 4000);
+  function deleteChat(id: string) {
+    socket.emit("deleteChat", id);
+  }
+
+  // Kick confirmation popup target.
+  let kickTarget: RoomSocketData | null = $state(null);
+  function confirmKick() {
+    if (!kickTarget?.playerId) {
+      kickTarget = null;
+      return;
     }
+    socket.emit("kick", kickTarget.playerId);
+    toast.success("Player kicked");
+    kickTarget = null;
+  }
+  function onKickDialogOpenChange(open: boolean) {
+    if (!open) kickTarget = null;
   }
 
   let exportFormat: "json" | "csv" = $state("json");
@@ -383,7 +398,10 @@
 {/snippet}
 
 {#snippet settingsPanel(uid: string)}
-  <div class="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-border bg-card p-4 shadow-xl">
+  <div
+    class="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-border bg-card p-4 shadow-xl"
+    transition:fade={fadeParams}
+  >
     <p class="text-sm font-bold">Display settings</p>
     <p class="mt-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">View</p>
     <div
@@ -400,7 +418,7 @@
     </div>
     <div class="mt-3 flex items-center gap-2">
       <Checkbox id="showExtras-{uid}" bind:checked={showExtras} />
-      <Label for="showExtras-{uid}" class="cursor-pointer text-sm">Show controls & results</Label>
+      <Label for="showExtras-{uid}" class="cursor-pointer text-sm">Show controls</Label>
     </div>
     <div class="mt-2.5 flex items-center gap-2">
       <Checkbox id="scoreTimesFive-{uid}" bind:checked={scoreTimesFive} />
@@ -464,7 +482,7 @@
 
 {#snippet leaderboardPanel()}
   {#if currentState === "finished" && leaderboard.length > 0}
-    <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+    <div class="mathex-panel rounded-2xl p-5 sm:p-6" transition:slide={slideParams}>
       <div class="flex items-center justify-between gap-2">
         <button
           type="button"
@@ -544,7 +562,7 @@
     aria-expanded={panelIsOpen("logs")}
     class="flex w-full items-center justify-between gap-2 text-left"
   >
-    <Header size="h2">Logs ({filteredLogs.length})</Header>
+    <Header size="h2">Logs</Header>
     <ChevronDown
       class="h-4 w-4 shrink-0 text-muted-foreground transition-transform {panelIsOpen('logs') ? '' : '-rotate-90'}"
     />
@@ -573,7 +591,7 @@
 {/snippet}
 
 {#snippet hostChatPanel(scrollKey: string)}
-  <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+  <div class="mathex-panel rounded-2xl p-5 sm:p-6" transition:slide={slideParams}>
     <button
       type="button"
       onclick={() => togglePanel("chat")}
@@ -582,13 +600,6 @@
     >
       <span class="flex items-center gap-2">
         <Header size="h2">Chat</Header>
-        {#if chatMessages.length > 0}
-          <span
-            class="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[0.65rem] font-bold text-primary-foreground"
-          >
-            {chatMessages.length > 99 ? "99+" : chatMessages.length}
-          </span>
-        {/if}
       </span>
       <ChevronDown
         class="h-4 w-4 shrink-0 text-muted-foreground transition-transform {panelIsOpen('chat') ? '' : '-rotate-90'}"
@@ -603,7 +614,7 @@
           {#each chatMessages as message (message.id)}
             {@const isHostMessage = message.name === "Host"}
             <div
-              class="max-w-[85%] rounded-xl px-2.5 py-1.5 {isHostMessage
+              class="group relative max-w-[85%] rounded-xl py-1.5 pr-7 pl-2.5 {isHostMessage
                 ? 'self-end bg-primary/10'
                 : 'self-start bg-muted/60'}"
             >
@@ -612,15 +623,25 @@
                   ? 'text-primary'
                   : 'text-muted-foreground'}"
               >
-                {message.name}
                 {#if isHostMessage}
                   <span
                     class="rounded bg-primary px-1 py-px text-[0.6rem] font-black tracking-wider text-primary-foreground"
                     >HOST</span
                   >
+                {:else}
+                  {message.name}
                 {/if}
               </p>
               <p class="text-sm break-words">{message.text}</p>
+              <button
+                type="button"
+                onclick={() => deleteChat(message.id)}
+                title="Delete message"
+                aria-label="Delete message from {message.name}"
+                class="absolute top-1 right-1 rounded p-0.5 text-muted-foreground opacity-100 transition-opacity hover:text-destructive focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+              >
+                <X class="h-3 w-3" />
+              </button>
             </div>
           {:else}
             <p class="text-sm text-muted-foreground">No messages yet. Say hi!</p>
@@ -781,20 +802,15 @@
 {/snippet}
 
 {#snippet kickButton(player: RoomSocketData)}
-  {@const key = player.playerId ?? player.name ?? ""}
-  {#if key}
+  {#if player.playerId}
     <button
       type="button"
-      onclick={() => askKick(player.playerId)}
-      title={kickArmed === key ? "Click again to confirm kick" : "Kick player"}
-      aria-label={kickArmed === key ? `Confirm kick ${player.name}` : `Kick ${player.name}`}
-      class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors {kickArmed ===
-      key
-        ? 'bg-destructive text-destructive-foreground'
-        : 'text-muted-foreground hover:bg-destructive/10 hover:text-destructive'}"
+      onclick={() => (kickTarget = player)}
+      title="Kick player"
+      aria-label={`Kick ${player.name}`}
+      class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
     >
       <UserX class="h-3.5 w-3.5" />
-      {#if kickArmed === key}<span>Kick?</span>{/if}
     </button>
   {/if}
 {/snippet}
@@ -820,7 +836,7 @@
             : '-rotate-90'}"
         />
       </button>
-      <div class="relative">
+      <div class="relative" data-settings-wrap>
         <Button
           variant="outline"
           size="sm"
@@ -927,6 +943,21 @@
       </AlertDialog.Footer>
     </AlertDialog.Content>
   </AlertDialog.Root>
+  <AlertDialog.Root open={kickTarget !== null} onOpenChange={onKickDialogOpenChange}>
+    <AlertDialog.Content>
+      <AlertDialog.Header>
+        <AlertDialog.Title>Kick {kickTarget?.name}?</AlertDialog.Title>
+        <AlertDialog.Description
+          >They will be removed from this competition immediately. They can rejoin afterwards if late joining is
+          allowed.</AlertDialog.Description
+        >
+      </AlertDialog.Header>
+      <AlertDialog.Footer>
+        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+        <AlertDialog.Action onclick={confirmKick}>Kick player</AlertDialog.Action>
+      </AlertDialog.Footer>
+    </AlertDialog.Content>
+  </AlertDialog.Root>
   <main class="mx-auto flex w-full max-w-7xl flex-col gap-4">
     <header class="flex flex-col justify-between gap-4 py-2 sm:flex-row sm:items-end">
       <div>
@@ -993,22 +1024,27 @@
             {/key}
           </div>
           <div
-            class="hidden items-start gap-4 transition-all duration-300 lg:grid {showExtras
-              ? 'lg:grid-cols-2'
-              : 'lg:grid-cols-1'}"
+            class="hidden items-start gap-4 transition-all lg:grid {animations
+              ? 'duration-300'
+              : 'duration-0'} {showExtras
+              ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'
+              : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,0fr)]'}"
           >
             {@render playerListPanel("list-desktop")}
-            {#if showExtras}
-              <div transition:slide={slideParams}>
-                {@render extrasStack("list-desktop")}
-              </div>
-            {/if}
+            <div
+              class="min-w-0 overflow-hidden transition-opacity {animations ? 'duration-300' : 'duration-0'} {showExtras
+                ? 'opacity-100'
+                : 'opacity-0'}"
+              inert={!showExtras}
+            >
+              {@render extrasStack("list-desktop")}
+            </div>
           </div>
         {:else}
           <div
-            class="grid items-start gap-4 transition-all duration-300 {showExtras
+            class="grid items-start gap-4 transition-all {animations ? 'duration-300' : 'duration-0'} {showExtras
               ? '2xl:grid-cols-[minmax(0,1fr)_360px]'
-              : ''}"
+              : '2xl:grid-cols-[minmax(0,1fr)_0px]'}"
           >
             <div class="flex min-w-0 flex-col gap-4">
               <div class="mathex-panel rounded-2xl p-5 sm:p-6">
@@ -1032,7 +1068,7 @@
                     />
                   </button>
                   <div class="flex items-center gap-2">
-                    <div class="relative">
+                    <div class="relative" data-settings-wrap>
                       <Button
                         variant="outline"
                         size="sm"
@@ -1168,8 +1204,13 @@
               {/if}
             </div>
 
-            {#if showExtras}
-              <div class="hidden flex-col gap-4 2xl:flex" transition:fade={fadeParams}>
+            <div
+              class="hidden min-w-0 overflow-hidden transition-opacity 2xl:block {animations
+                ? 'duration-300'
+                : 'duration-0'} {showExtras ? 'opacity-100' : 'opacity-0'}"
+              inert={!showExtras}
+            >
+              <div class="flex w-[360px] flex-col gap-4">
                 <div class="mathex-panel rounded-2xl p-5 sm:p-6">
                   {@render logsPanel("tiles-desktop")}
                 </div>
@@ -1177,7 +1218,7 @@
                   {@render hostChatPanel("tiles-side")}
                 {/if}
               </div>
-            {/if}
+            </div>
           </div>
         {/if}
       </div>
