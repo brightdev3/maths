@@ -18,6 +18,7 @@ export interface RoomServerToClientEvents {
   gameEndsAt: (endsAt: number | null) => void;
   chatMessage: (message: ChatMessage) => void;
   chatHistory: (messages: ChatMessage[]) => void;
+  chatDelete: (id: string) => void;
   joinDenied: (reason: string) => void;
   running: (durationMs: number) => void;
   answerResult: (correct: boolean) => void;
@@ -108,6 +109,7 @@ export interface RoomManageClientToServerEvents {
   updateSettings: (settings: Partial<RoomSettings>) => void;
   setGameTimer: (minutes: number | null) => void;
   sendChat: (text: string) => void;
+  deleteChat: (id: string) => void;
 }
 
 export interface RoomManageServerToClientEvents {
@@ -121,6 +123,7 @@ export interface RoomManageServerToClientEvents {
   gameEndsAt: (endsAt: number | null) => void;
   chatMessage: (message: ChatMessage) => void;
   chatHistory: (messages: ChatMessage[]) => void;
+  chatDelete: (id: string) => void;
 }
 
 export interface RoomManageInterServerEvents {}

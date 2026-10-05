@@ -223,6 +223,9 @@
     chatMessages = [...chatMessages, message].slice(-200);
     if (sidePanel !== "chat") chatUnread++;
   });
+  socket.on("chatDelete", (id) => {
+    chatMessages = chatMessages.filter((message) => message.id !== id);
+  });
   $effect(() => {
     chatMessages.length;
     if (sidePanel === "chat" && chatScrollEl) chatScrollEl.scrollTop = chatScrollEl.scrollHeight;
@@ -623,11 +626,12 @@
                         ? 'text-amber-600 dark:text-amber-400'
                         : 'text-muted-foreground'}"
                     >
-                      {message.name}
                       {#if isHostMessage}
                         <span class="rounded bg-amber-500 px-1 py-px text-[0.6rem] font-black tracking-wider text-white"
                           >HOST</span
                         >
+                      {:else}
+                        {message.name}
                       {/if}
                     </p>
                   {/if}

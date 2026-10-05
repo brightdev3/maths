@@ -277,6 +277,16 @@ export const createWSServer = (base: ServerInstance) => {
       roomNamespace.emit("chatMessage", message);
       roomManageNamespace.emit("chatMessage", message);
     });
+    socket.on("deleteChat", (id) => {
+      const target = String(id ?? "");
+      if (!target) return;
+      const index = room.chat.findIndex((message) => message.id === target);
+      if (index === -1) return;
+      room.chat.splice(index, 1);
+      saveRoom(room);
+      roomNamespace.emit("chatDelete", target);
+      roomManageNamespace.emit("chatDelete", target);
+    });
   });
 
   const roomNamespaces = io.of(/^\/room\-\d{6}$/) as Namespace<
