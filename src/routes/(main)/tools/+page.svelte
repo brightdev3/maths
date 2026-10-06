@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Header } from "$lib/components/ui/header";
-  import { Brain, CircleDot, Gamepad2, Pencil, Radio, Zap } from "@lucide/svelte/icons";
+  import { Brain, Calculator, CircleDot, Gamepad2, Pencil, Radio, Zap } from "@lucide/svelte/icons";
 
   interface Game {
     name: string;
@@ -42,6 +42,14 @@
       colour:
         "bg-emerald-500/10 text-emerald-600 border-emerald-200 hover:border-emerald-400 dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-800",
       icon: CircleDot
+    },
+    {
+      name: "24 Game",
+      description: "Use all four numbers and the four operations to make exactly 24.",
+      url: "/tools/24-game",
+      colour:
+        "bg-sky-500/10 text-sky-600 border-sky-200 hover:border-sky-400 dark:bg-sky-500/20 dark:text-sky-400 dark:border-sky-800",
+      icon: Calculator
     }
   ];
 </script>
