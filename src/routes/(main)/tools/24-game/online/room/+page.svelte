@@ -5,6 +5,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { createId } from "$lib/utils";
   import { io, type Socket } from "socket.io-client";
   import { onDestroy, onMount } from "svelte";
@@ -416,19 +417,25 @@
               </div>
             {/if}
           </div>
-          <div class="mt-3 grid gap-1.5">
-            <label class="flex items-center justify-between gap-2 text-sm font-medium">
-              Auto-start next round
-              <input type="checkbox" class="h-4 w-4" bind:checked={form.autoAdvance} />
-            </label>
+          <div
+            class="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background px-3 py-2.5"
+          >
+            <div class="flex items-center gap-2">
+              <Checkbox id="room-auto" bind:checked={form.autoAdvance} />
+              <label for="room-auto" class="text-sm font-medium">Auto-start next round</label>
+            </div>
             {#if form.autoAdvance}
-              <Input
-                type="number"
-                min={5}
-                max={60}
-                aria-label="Seconds before the next round"
-                bind:value={form.autoAdvanceSeconds}
-              />
+              <div class="flex items-center gap-2">
+                <Input
+                  class="h-9 w-20"
+                  type="number"
+                  min={5}
+                  max={60}
+                  aria-label="Seconds before the next round"
+                  bind:value={form.autoAdvanceSeconds}
+                />
+                <span class="text-xs text-muted-foreground">sec</span>
+              </div>
             {/if}
           </div>
           <Button class="mt-4" variant="outline" onclick={saveSettings} disabled={!connected}>Save settings</Button>

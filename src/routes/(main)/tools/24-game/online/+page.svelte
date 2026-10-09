@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { createId } from "$lib/utils";
   import { io, type Socket } from "socket.io-client";
   import { onDestroy, onMount } from "svelte";
@@ -31,7 +32,7 @@
   let joiningCode = $state<string | null>(null);
   let passwordFor = $state<Game24RoomSummary | null>(null);
   let password = $state("");
-  let showCreate = $state(true);
+  let showCreate = $state(false);
 
   let form = $state({
     roomName: "",
@@ -313,9 +314,11 @@
       </aside>
 
       {#if showCreate}
-        <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
-          <div class="mathex-panel my-8 w-full max-w-lg rounded-3xl p-6 sm:p-8">
-            <div class="flex items-center justify-between gap-2">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div class="mathex-panel max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-3xl p-6 sm:p-8">
+            <div
+              class="sticky top-0 -mx-6 -mt-6 mb-4 flex items-center justify-between gap-2 border-b border-border/60 bg-card/95 px-6 py-4 backdrop-blur-sm sm:-mx-8 sm:-mt-8 sm:px-8"
+            >
               <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
                 <Plus class="h-3.5 w-3.5" /> Create a game
               </div>
@@ -325,10 +328,10 @@
                 onclick={() => (showCreate = false)}>Close</button
               >
             </div>
-            <p class="mt-1 text-sm text-muted-foreground">You will play too. Start whenever you are ready.</p>
+            <p class="text-sm text-muted-foreground">You will play too. Start whenever you are ready.</p>
 
             <form
-              class="mt-5 grid gap-4"
+              class="mt-5 grid gap-5"
               onsubmit={(event) => {
                 event.preventDefault();
                 createRoom();
@@ -361,7 +364,7 @@
 
               <div class="grid gap-1.5">
                 <span class="text-sm font-medium">Scoring</span>
-                <div class="grid gap-2">
+                <div class="grid gap-2 sm:grid-cols-2">
                   <button
                     type="button"
                     onclick={() => (form.mode = "hit")}
@@ -381,7 +384,7 @@
                 </div>
               </div>
 
-              <div class="grid grid-cols-2 gap-3">
+              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div class="grid gap-1.5">
                   <Label for="create-difficulty">Difficulty</Label>
                   <select
@@ -410,19 +413,25 @@
                 {/if}
               </div>
 
-              <div class="grid gap-1.5">
-                <label class="flex items-center justify-between gap-2 text-sm font-medium">
-                  Auto-start next round
-                  <input type="checkbox" class="h-4 w-4" bind:checked={form.autoAdvance} />
-                </label>
+              <div
+                class="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background px-3 py-2.5"
+              >
+                <div class="flex items-center gap-2">
+                  <Checkbox id="create-auto" bind:checked={form.autoAdvance} />
+                  <label for="create-auto" class="text-sm font-medium">Auto-start next round</label>
+                </div>
                 {#if form.autoAdvance}
-                  <Input
-                    type="number"
-                    min={5}
-                    max={60}
-                    aria-label="Seconds before the next round"
-                    bind:value={form.autoAdvanceSeconds}
-                  />
+                  <div class="flex items-center gap-2">
+                    <Input
+                      class="h-9 w-20"
+                      type="number"
+                      min={5}
+                      max={60}
+                      aria-label="Seconds before the next round"
+                      bind:value={form.autoAdvanceSeconds}
+                    />
+                    <span class="text-xs text-muted-foreground">sec</span>
+                  </div>
                 {/if}
               </div>
 
