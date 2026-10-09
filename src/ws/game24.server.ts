@@ -9,6 +9,7 @@ import {
   type Game24ClientToServerEvents,
   type Game24InterServerEvents,
   type Game24JoinResult,
+  type Game24OnlineUser,
   type Game24OperationResult,
   type Game24Player,
   type Game24PlayerView,
@@ -60,6 +61,7 @@ export function registerGame24Server(io: AnyServer): void {
   const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const reassignTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const autoAdvanceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const online = new Map<string, { playerId: string | null; name: string | null; roomCode: string | null }>();
 
   const ns: Namespace<    Game24ClientToServerEvents,
     Game24ServerToClientEvents,
@@ -122,8 +124,17 @@ export function registerGame24Server(io: AnyServer): void {
       .map(summary);
   }
 
+  function onlineUsers(): Game24OnlineUser[] {
+    return [...online.entries()].map(([socketId, entry]) => ({
+      socketId,
+      playerId: entry.playerId,
+      name: entry.name,
+      inRoom: entry.roomCode !== null
+    }));
+  }
+
   function broadcastLobby() {
-    ns.emit("lobby", lobbySummaries());
+    ns.emit("lobby", lobbySummaries(), onlineUsers());
   }
 
   function toPlayerView(room: Game24Room, player: Game24Player): Game24PlayerView {
@@ -230,6 +241,12 @@ export function registerGame24Server(io: AnyServer): void {
     clearReassign(room.code);
     socket.data.playerId = playerId;
     socket.data.roomCode = room.code;
+    const entry = online.get(socket.id);
+    if (entry) {
+      entry.playerId = playerId;
+      entry.name = name;
+      entry.roomCode = room.code;
+    }
     socket.join(channel(room.code));
     socket.emit("joined", name, room.code);
   }
@@ -345,6 +362,8 @@ export function registerGame24Server(io: AnyServer): void {
     if (socket) {
       socket.leave(channel(room.code));
       socket.data.roomCode = null;
+      const entry = online.get(socket.id);
+      if (entry) entry.roomCode = null;
     }
     if (room.ownerId === playerId) room.ownerId = [...room.players.keys()][0] ?? "";
     if (room.players.size === 0) {
@@ -357,7 +376,8 @@ export function registerGame24Server(io: AnyServer): void {
 
   ns.on("connection", (socket) => {
     socket.data = { playerId: null, roomCode: null };
-    socket.emit("lobby", lobbySummaries());
+    online.set(socket.id, { playerId: null, name: null, roomCode: null });
+    broadcastLobby();
 
     const reject = (ack: OperationAck, error: string) => ack?.({ ok: false, error });
     const accept = (ack: OperationAck) => ack?.({ ok: true });
@@ -551,6 +571,8 @@ export function registerGame24Server(io: AnyServer): void {
           playerSocket.emit("kicked");
           playerSocket.leave(channel(room.code));
           playerSocket.data.roomCode = null;
+          const entry = online.get(playerSocket.id);
+          if (entry) entry.roomCode = null;
         }
       }
       accept(ack);
@@ -662,11 +684,18 @@ export function registerGame24Server(io: AnyServer): void {
     });
 
     socket.on("disconnect", () => {
+      online.delete(socket.id);
       const room = currentRoom(socket);
       const playerId = socket.data.playerId;
-      if (!room || !playerId) return;
+      if (!room || !playerId) {
+        broadcastLobby();
+        return;
+      }
       const player = room.players.get(playerId);
-      if (!player) return;
+      if (!player) {
+        broadcastLobby();
+        return;
+      }
       player.connected = false;
       if (room.state === "lobby") {
         // A quick refresh or a lobby-to-room navigation disconnects and

@@ -10,6 +10,7 @@
   import { toast } from "svelte-sonner";
   import type {
     Game24ClientToServerEvents,
+    Game24OnlineUser,
     Game24RoomSummary,
     Game24ServerToClientEvents
   } from "$lib/game24/schemas";
@@ -22,6 +23,7 @@
   onDestroy(() => socket.disconnect());
 
   let rooms = $state<Game24RoomSummary[]>([]);
+  let online = $state<Game24OnlineUser[]>([]);
   let connected = $state(false);
   let name = $state("");
   let playerId = $state("");
@@ -62,7 +64,10 @@
   socket.on("connect", () => (connected = true));
   socket.on("disconnect", () => (connected = false));
   socket.on("connect_error", () => toast.error("Could not reach the game server"));
-  socket.on("lobby", (list) => (rooms = list));
+  socket.on("lobby", (list, users) => {
+    rooms = list;
+    online = users;
+  });
   socket.on("joined", (joinedName) => persistName(joinedName));
   socket.on("alert", (type, message) => {
     if (type === "normal" || type === "action" || type === "default") {
@@ -214,7 +219,7 @@
       </div>
     </div>
 
-    <div class="mt-6">
+    <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section>
         <div class="flex items-center justify-between">
           <h2 class="flex items-center gap-2 text-lg font-bold">
@@ -275,6 +280,37 @@
           </div>
         {/if}
       </section>
+
+      <aside>
+        <div class="mathex-panel rounded-3xl p-5 lg:sticky lg:top-24">
+          <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+            <Users class="h-3.5 w-3.5" /> Online
+            <span class="font-normal text-muted-foreground">({online.length})</span>
+          </div>
+          <div class="mt-3 grid gap-1.5">
+            {#each online as user (user.socketId)}
+              <div class="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 p-2">
+                <span
+                  class="h-2 w-2 shrink-0 rounded-full {user.inRoom ? 'bg-amber-500' : 'bg-emerald-500'}"
+                  title={user.inRoom ? "In a game" : "In the lobby"}
+                ></span>
+                <span
+                  class="truncate text-sm font-medium {user.playerId && user.playerId === playerId
+                    ? 'text-primary'
+                    : ''}"
+                >
+                  {user.name ?? "Choosing a name…"}{#if user.playerId && user.playerId === playerId}&nbsp;(you){/if}
+                </span>
+                <span class="ml-auto shrink-0 text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {user.inRoom ? "Playing" : "Lobby"}
+                </span>
+              </div>
+            {:else}
+              <p class="text-sm text-muted-foreground">No one else is here yet.</p>
+            {/each}
+          </div>
+        </div>
+      </aside>
 
       {#if showCreate}
         <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">

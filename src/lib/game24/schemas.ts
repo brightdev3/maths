@@ -164,6 +164,14 @@ export interface Game24RoomSummary {
   createdAt: number;
 }
 
+/** Someone connected to the game server, shown in the lobby sidebar. */
+export interface Game24OnlineUser {
+  socketId: string;
+  playerId: string | null;
+  name: string | null;
+  inRoom: boolean;
+}
+
 export interface Game24PlayerView {
   id: string;
   name: string;
@@ -220,7 +228,7 @@ export interface Game24ClientToServerEvents {
 }
 
 export interface Game24ServerToClientEvents {
-  lobby: (rooms: Game24RoomSummary[]) => void;
+  lobby: (rooms: Game24RoomSummary[], online: Game24OnlineUser[]) => void;
   room: (snapshot: Game24Snapshot | null) => void;
   alert: (type: ToastT["type"], message: string) => void;
   joined: (name: string, code: string) => void;
