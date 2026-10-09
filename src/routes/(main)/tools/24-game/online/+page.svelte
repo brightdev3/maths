@@ -40,7 +40,9 @@
     difficulty: "normal" as "easy" | "normal" | "hard",
     totalRounds: 5,
     roundSeconds: 60,
-    maxPlayers: 4
+    maxPlayers: 4,
+    autoAdvance: true,
+    autoAdvanceSeconds: 10
   });
 
   onMount(() => {
@@ -105,7 +107,9 @@
         difficulty: form.difficulty,
         totalRounds: Number(form.totalRounds),
         roundTimeMs: Math.round(Number(form.roundSeconds) * 1000),
-        maxPlayers: form.format === "1v1" ? 2 : Number(form.maxPlayers)
+        maxPlayers: form.format === "1v1" ? 2 : Number(form.maxPlayers),
+        autoAdvance: form.autoAdvance,
+        autoAdvanceSeconds: Number(form.autoAdvanceSeconds)
       },
       (res) => {
         creating = false;
@@ -360,6 +364,22 @@
                     <Label for="create-max">Max players</Label>
                     <Input id="create-max" type="number" min={2} max={16} bind:value={form.maxPlayers} />
                   </div>
+                {/if}
+              </div>
+
+              <div class="grid gap-1.5">
+                <label class="flex items-center justify-between gap-2 text-sm font-medium">
+                  Auto-start next round
+                  <input type="checkbox" class="h-4 w-4" bind:checked={form.autoAdvance} />
+                </label>
+                {#if form.autoAdvance}
+                  <Input
+                    type="number"
+                    min={5}
+                    max={60}
+                    aria-label="Seconds before the next round"
+                    bind:value={form.autoAdvanceSeconds}
+                  />
                 {/if}
               </div>
 

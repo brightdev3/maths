@@ -59,6 +59,7 @@ export function registerGame24Server(io: AnyServer): void {
   const hitTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const reassignTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const autoAdvanceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   const ns: Namespace<    Game24ClientToServerEvents,
     Game24ServerToClientEvents,
@@ -87,6 +88,11 @@ export function registerGame24Server(io: AnyServer): void {
     const timer = reassignTimers.get(code);
     if (timer) clearTimeout(timer);
     reassignTimers.delete(code);
+  }
+  function clearAuto(code: string) {
+    const timer = autoAdvanceTimers.get(code);
+    if (timer) clearTimeout(timer);
+    autoAdvanceTimers.delete(code);
   }
 
   function currentRoom(socket: Game24Socket): Game24Room | null {
@@ -164,6 +170,9 @@ export function registerGame24Server(io: AnyServer): void {
       roundEndsAt: room.roundEndsAt,
       roundComplete: room.state === "playing" && room.puzzle !== null && room.roundEndsAt === null,
       hit: room.hit,
+      autoAdvance: room.autoAdvance,
+      autoAdvanceSeconds: Math.round(room.autoAdvanceMs / 1000),
+      nextRoundAt: room.nextRoundAt,
       serverNow: Date.now()
     };
   }
@@ -176,6 +185,8 @@ export function registerGame24Server(io: AnyServer): void {
     clearRound(room.code);
     clearHit(room.code);
     clearCleanup(room.code);
+    clearReassign(room.code);
+    clearAuto(room.code);
     rooms.delete(room.code);
     ns.to(channel(room.code)).emit("room", null);
     broadcastLobby();
@@ -223,9 +234,32 @@ export function registerGame24Server(io: AnyServer): void {
     socket.emit("joined", name, room.code);
   }
 
+  function scheduleAutoAdvance(room: Game24Room) {
+    clearAuto(room.code);
+    room.nextRoundAt = null;
+    if (!room.autoAdvance) return;
+    room.nextRoundAt = Date.now() + room.autoAdvanceMs;
+    autoAdvanceTimers.set(
+      room.code,
+      setTimeout(() => {
+        autoAdvanceTimers.delete(room.code);
+        const current = rooms.get(room.code);
+        if (!current || current.state !== "playing" || current.roundEndsAt !== null) return;
+        if (current.round >= current.totalRounds) {
+          finishRoom(current);
+        } else {
+          current.round += 1;
+          beginRound(current);
+        }
+      }, room.autoAdvanceMs)
+    );
+  }
+
   function beginRound(room: Game24Room) {
     clearRound(room.code);
     clearHit(room.code);
+    clearAuto(room.code);
+    room.nextRoundAt = null;
     room.roundStartedAt = Date.now();
     room.roundEndsAt = room.roundStartedAt + room.roundTimeMs;
     room.hit = null;
@@ -264,14 +298,17 @@ export function registerGame24Server(io: AnyServer): void {
         if (!player.solvedThisRound) player.totalTimeMs += room.roundTimeMs;
       }
     }
+    scheduleAutoAdvance(room);
     broadcastRoom(room);
   }
 
   function finishRoom(room: Game24Room) {
     clearRound(room.code);
     clearHit(room.code);
+    clearAuto(room.code);
     room.state = "finished";
     room.roundEndsAt = null;
+    room.nextRoundAt = null;
     room.hit = null;
     broadcastRoom(room);
     broadcastLobby();
@@ -367,6 +404,9 @@ export function registerGame24Server(io: AnyServer): void {
         roundStartedAt: null,
         roundEndsAt: null,
         hit: null,
+        autoAdvance: input.data.autoAdvance,
+        autoAdvanceMs: input.data.autoAdvanceSeconds * 1000,
+        nextRoundAt: null,
         players: new Map([[owner.id, owner]]),
         createdAt: now
       };
@@ -450,6 +490,8 @@ export function registerGame24Server(io: AnyServer): void {
       if (room.state !== "playing") return reject(ack, "No round is in progress");
       clearRound(room.code);
       clearHit(room.code);
+      clearAuto(room.code);
+      room.nextRoundAt = null;
       room.round += 1;
       if (room.round > room.totalRounds) finishRoom(room);
       else beginRound(room);
@@ -484,11 +526,13 @@ export function registerGame24Server(io: AnyServer): void {
       }
       clearRound(room.code);
       clearHit(room.code);
+      clearAuto(room.code);
       room.state = "lobby";
       room.round = 0;
       room.puzzle = null;
       room.roundStartedAt = null;
       room.roundEndsAt = null;
+      room.nextRoundAt = null;
       room.hit = null;
       broadcastRoom(room);
       broadcastLobby();
@@ -524,6 +568,8 @@ export function registerGame24Server(io: AnyServer): void {
       if (input.data.difficulty !== undefined) room.difficulty = input.data.difficulty;
       if (input.data.totalRounds !== undefined) room.totalRounds = input.data.totalRounds;
       if (input.data.roundTimeMs !== undefined) room.roundTimeMs = input.data.roundTimeMs;
+      if (input.data.autoAdvance !== undefined) room.autoAdvance = input.data.autoAdvance;
+      if (input.data.autoAdvanceSeconds !== undefined) room.autoAdvanceMs = input.data.autoAdvanceSeconds * 1000;
       if (input.data.maxPlayers !== undefined) {
         if (input.data.maxPlayers < room.players.size) return reject(ack, "More players have already joined");
         room.maxPlayers = room.format === "1v1" ? 2 : input.data.maxPlayers;

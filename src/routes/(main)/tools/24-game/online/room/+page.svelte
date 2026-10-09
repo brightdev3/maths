@@ -63,7 +63,9 @@
     difficulty: "normal" as "easy" | "normal" | "hard",
     totalRounds: 5,
     roundSeconds: 60,
-    maxPlayers: 4
+    maxPlayers: 4,
+    autoAdvance: true,
+    autoAdvanceSeconds: 10
   });
 
   onMount(() => {
@@ -178,6 +180,9 @@
   const hitRemainingMs = $derived.by(() =>
     snapshot?.hit && snapshot.hit.playerId === playerId ? Math.max(0, snapshot.hit.deadline - liveServerNow()) : null
   );
+  const nextRoundInMs = $derived.by(() =>
+    snapshot?.nextRoundAt ? Math.max(0, snapshot.nextRoundAt - liveServerNow()) : null
+  );
   const boardDisabled = $derived.by(() => {
     const current = snapshot;
     if (!current || current.state !== "playing" || current.roundComplete || !myPlayer) return true;
@@ -194,7 +199,9 @@
         difficulty: snapshot.difficulty,
         totalRounds: snapshot.totalRounds,
         roundSeconds: Math.round(snapshot.roundTimeMs / 1000),
-        maxPlayers: snapshot.maxPlayers
+        maxPlayers: snapshot.maxPlayers,
+        autoAdvance: snapshot.autoAdvance,
+        autoAdvanceSeconds: snapshot.autoAdvanceSeconds
       };
     }
   });
@@ -231,7 +238,9 @@
         difficulty: form.difficulty,
         totalRounds: Number(form.totalRounds),
         roundTimeMs: Math.round(Number(form.roundSeconds) * 1000),
-        maxPlayers: Number(form.maxPlayers)
+        maxPlayers: Number(form.maxPlayers),
+        autoAdvance: form.autoAdvance,
+        autoAdvanceSeconds: Number(form.autoAdvanceSeconds)
       },
       result
     );
@@ -407,6 +416,21 @@
               </div>
             {/if}
           </div>
+          <div class="mt-3 grid gap-1.5">
+            <label class="flex items-center justify-between gap-2 text-sm font-medium">
+              Auto-start next round
+              <input type="checkbox" class="h-4 w-4" bind:checked={form.autoAdvance} />
+            </label>
+            {#if form.autoAdvance}
+              <Input
+                type="number"
+                min={5}
+                max={60}
+                aria-label="Seconds before the next round"
+                bind:value={form.autoAdvanceSeconds}
+              />
+            {/if}
+          </div>
           <Button class="mt-4" variant="outline" onclick={saveSettings} disabled={!connected}>Save settings</Button>
         </section>
       {/if}
@@ -498,7 +522,11 @@
           <div class="mathex-panel mt-4 rounded-3xl p-5 sm:p-7">
             {#if snapshot.roundComplete}
               <p class="text-center text-sm font-semibold text-muted-foreground">
-                Round over. Waiting for the host to continue…
+                {#if nextRoundInMs !== null}
+                  Next round in {Math.max(0, Math.ceil(nextRoundInMs / 1000))}s…
+                {:else}
+                  Round over. Waiting for the host to continue…
+                {/if}
               </p>
             {:else if snapshot.mode === "hit" && snapshot.hit && snapshot.hit.playerId !== playerId}
               <p class="text-center text-sm font-semibold text-muted-foreground">

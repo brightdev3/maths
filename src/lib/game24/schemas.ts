@@ -37,7 +37,9 @@ export const CreateGame24RoomInput = z.object({
   difficulty: Game24Difficulty,
   totalRounds: TotalRounds,
   roundTimeMs: RoundTimeMs,
-  maxPlayers: MaxPlayers.default(2)
+  maxPlayers: MaxPlayers.default(2),
+  autoAdvance: z.boolean().default(true),
+  autoAdvanceSeconds: z.number().int().min(5).max(60).default(10)
 });
 export type CreateGame24RoomInput = z.infer<typeof CreateGame24RoomInput>;
 
@@ -57,7 +59,9 @@ export const ConfigureGame24RoomInput = z.object({
   roundTimeMs: RoundTimeMs.optional(),
   maxPlayers: MaxPlayers.optional(),
   visibility: Game24Visibility.optional(),
-  password: RoomPassword.optional()
+  password: RoomPassword.optional(),
+  autoAdvance: z.boolean().optional(),
+  autoAdvanceSeconds: z.number().int().min(5).max(60).optional()
 });
 export type ConfigureGame24RoomInput = z.infer<typeof ConfigureGame24RoomInput>;
 
@@ -133,6 +137,11 @@ export interface Game24Room {
   roundEndsAt: number | null;
   /** Hit mode: who currently holds the buzz, and their deadline. */
   hit: { playerId: string; deadline: number } | null;
+  /** Automatically start the next round once a round ends. */
+  autoAdvance: boolean;
+  autoAdvanceMs: number;
+  /** When the next round starts automatically, null when not scheduled. */
+  nextRoundAt: number | null;
   players: Map<string, Game24Player>;
   createdAt: number;
 }
@@ -186,6 +195,9 @@ export interface Game24Snapshot {
   roundEndsAt: number | null;
   roundComplete: boolean;
   hit: { playerId: string; deadline: number } | null;
+  autoAdvance: boolean;
+  autoAdvanceSeconds: number;
+  nextRoundAt: number | null;
   serverNow: number;
 }
 
