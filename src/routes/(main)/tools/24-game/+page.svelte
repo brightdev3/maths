@@ -1,82 +1,24 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Confetti } from "svelte-confetti";
-  import { Calculator, Lightbulb, RefreshCw, RotateCcw, Trophy } from "@lucide/svelte/icons";
+  import { Calculator, Lightbulb, RefreshCw, RotateCcw, Swords, Trophy } from "@lucide/svelte/icons";
+  import {
+    addFractions,
+    divideFractions,
+    equalFractions,
+    fraction,
+    formatFraction,
+    generatePuzzle,
+    maxFor,
+    multiplyFractions,
+    operatorSymbols,
+    subtractFractions,
+    type Difficulty,
+    type Fraction,
+    type Operator
+  } from "$lib/game24/engine";
 
-  type Fraction = { n: number; d: number };
-  type Difficulty = "easy" | "normal" | "hard";
-  type Operator = "+" | "-" | "*" | "/";
   type Tile = { id: number; value: Fraction; expr: string };
-
-  const gcd = (a: number, b: number): number => (b === 0 ? Math.abs(a) : gcd(b, a % b));
-
-  const fraction = (n: number, d = 1): Fraction => {
-    if (d < 0) {
-      n = -n;
-      d = -d;
-    }
-    const divisor = gcd(n, d) || 1;
-    return { n: n / divisor, d: d / divisor };
-  };
-
-  const addFractions = (a: Fraction, b: Fraction) => fraction(a.n * b.d + b.n * a.d, a.d * b.d);
-  const subtractFractions = (a: Fraction, b: Fraction) => fraction(a.n * b.d - b.n * a.d, a.d * b.d);
-  const multiplyFractions = (a: Fraction, b: Fraction) => fraction(a.n * b.n, a.d * b.d);
-  const divideFractions = (a: Fraction, b: Fraction) => fraction(a.n * b.d, a.d * b.n);
-  const equalFractions = (a: Fraction, b: Fraction) => a.n * b.d === b.n * a.d;
-
-  const formatFraction = (value: Fraction) => (value.d === 1 ? String(value.n) : `${value.n}/${value.d}`);
-
-  const operatorSymbols: Record<Operator, string> = { "+": "+", "-": "−", "*": "×", "/": "÷" };
-
-  function findSolution(values: number[]): string | null {
-    type Item = { value: Fraction; expr: string };
-    const target = fraction(24);
-    const items: Item[] = values.map((value) => ({ value: fraction(value), expr: String(value) }));
-
-    const recurse = (list: Item[]): string | null => {
-      if (list.length === 1) return equalFractions(list[0].value, target) ? list[0].expr : null;
-      for (let i = 0; i < list.length; i++) {
-        for (let j = i + 1; j < list.length; j++) {
-          const a = list[i];
-          const b = list[j];
-          const rest = list.filter((_, index) => index !== i && index !== j);
-          const candidates: Item[] = [
-            { value: addFractions(a.value, b.value), expr: `(${a.expr} + ${b.expr})` },
-            { value: subtractFractions(a.value, b.value), expr: `(${a.expr} - ${b.expr})` },
-            { value: subtractFractions(b.value, a.value), expr: `(${b.expr} - ${a.expr})` },
-            { value: multiplyFractions(a.value, b.value), expr: `(${a.expr} × ${b.expr})` }
-          ];
-          if (b.value.n !== 0)
-            candidates.push({ value: divideFractions(a.value, b.value), expr: `(${a.expr} ÷ ${b.expr})` });
-          if (a.value.n !== 0)
-            candidates.push({ value: divideFractions(b.value, a.value), expr: `(${b.expr} ÷ ${a.expr})` });
-          for (const candidate of candidates) {
-            const found = recurse([...rest, candidate]);
-            if (found) return found;
-          }
-        }
-      }
-      return null;
-    };
-
-    return recurse(items);
-  }
-
-  function maxFor(difficulty: Difficulty): number {
-    if (difficulty === "easy") return 6;
-    if (difficulty === "hard") return 13;
-    return 9;
-  }
-
-  function generatePuzzle(max: number): { tiles: number[]; solution: string } {
-    for (let attempt = 0; attempt < 300; attempt++) {
-      const tiles = Array.from({ length: 4 }, () => Math.floor(Math.random() * max) + 1);
-      const solution = findSolution(tiles);
-      if (solution) return { tiles, solution };
-    }
-    return { tiles: [4, 6, 2, 3], solution: findSolution([4, 6, 2, 3]) ?? "" };
-  }
 
   let nextTileId = 0;
   const makeTile = (value: Fraction, expr: string): Tile => ({ id: nextTileId++, value, expr });
@@ -177,7 +119,8 @@
     const high = Math.max(firstIndex, secondIndex);
     const next = [...tiles.slice(0, low), combined, ...tiles.slice(low + 1, high), ...tiles.slice(high + 1)];
     tiles = next;
-    selectedId = null;
+    // Select the newly produced tile by default so it is ready for the next operation.
+    selectedId = next.length > 1 ? combined.id : null;
     pendingOperator = null;
     message = "";
 
@@ -233,6 +176,11 @@
       <p class="mt-3 text-muted-foreground sm:text-lg">
         Combine all four numbers with +, −, × and ÷ to reach exactly 24.
       </p>
+      <div class="mt-5 flex justify-center">
+        <Button href="/tools/24-game/online" variant="outline" class="gap-1.5">
+          <Swords class="h-4 w-4" /> Play 1v1 or multiplayer
+        </Button>
+      </div>
     </header>
 
     <main class="mathex-panel mx-auto mt-8 max-w-xl rounded-3xl p-5 sm:p-8">

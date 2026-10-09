@@ -32,6 +32,9 @@ COPY src/ws/index.server.ts ./src/ws/index.server.ts
 COPY src/ws/physical.server.ts ./src/ws/physical.server.ts
 COPY src/ws/set-share.server.ts ./src/ws/set-share.server.ts
 COPY src/ws/collaborative-set.server.ts ./src/ws/collaborative-set.server.ts
+COPY src/ws/game24.server.ts ./src/ws/game24.server.ts
+COPY src/lib/game24/engine.ts ./src/lib/game24/engine.ts
+COPY src/lib/game24/schemas.ts ./src/lib/game24/schemas.ts
 COPY src/lib/mathex/schemas.ts ./src/lib/mathex/schemas.ts
 COPY src/lib/mathex/rooms.server.ts ./src/lib/mathex/rooms.server.ts
 COPY src/lib/mathex/physical.schemas.ts ./src/lib/mathex/physical.schemas.ts

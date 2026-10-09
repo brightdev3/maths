@@ -35,6 +35,7 @@ import { RoomStore } from "../lib/mathex/rooms.server";
 import { registerPhysicalCompetitionServer } from "./physical.server";
 import { registerSetShareServer } from "./set-share.server";
 import { registerCollaborativeSetServer } from "./collaborative-set.server";
+import { registerGame24Server } from "./game24.server";
 
 const config = {};
 const math = create(all, config);
@@ -64,6 +65,7 @@ export const createWSServer = (base: ServerInstance) => {
   });
   registerPhysicalCompetitionServer(io);
   registerSetShareServer(io);
+  registerGame24Server(io);
   const collaborativeSets = registerCollaborativeSetServer(io);
   const roomCreateNamespace: Namespace<
     RoomCreateClientToServerEvents,
