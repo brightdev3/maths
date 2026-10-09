@@ -209,12 +209,12 @@
           />
         </div>
         <Button class="gap-2" onclick={() => (showCreate = !showCreate)}>
-          <Plus class="h-4 w-4" /> {showCreate ? "Hide setup" : "Create a game"}
+          <Plus class="h-4 w-4" /> Create a game
         </Button>
       </div>
     </div>
 
-    <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <div class="mt-6">
       <section>
         <div class="flex items-center justify-between">
           <h2 class="flex items-center gap-2 text-lg font-bold">
@@ -277,10 +277,17 @@
       </section>
 
       {#if showCreate}
-        <aside>
-          <div class="mathex-panel sticky top-24 rounded-3xl p-5 sm:p-6">
-            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
-              <Plus class="h-3.5 w-3.5" /> Create a game
+        <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
+          <div class="mathex-panel my-8 w-full max-w-lg rounded-3xl p-6 sm:p-8">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+                <Plus class="h-3.5 w-3.5" /> Create a game
+              </div>
+              <button
+                type="button"
+                class="text-sm font-medium text-muted-foreground hover:text-foreground"
+                onclick={() => (showCreate = false)}>Close</button
+              >
             </div>
             <p class="mt-1 text-sm text-muted-foreground">You will play too. Start whenever you are ready.</p>
 
@@ -417,7 +424,7 @@
               </Button>
             </form>
           </div>
-        </aside>
+        </div>
       {/if}
     </div>
   </div>
