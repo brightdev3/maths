@@ -59,7 +59,7 @@ export const createWSServer = (base: ServerInstance) => {
     // Vite's HMR channel in dev). Engine.io would otherwise `socket.end()`
     // any foreign upgrade after `destroyUpgradeTimeout` (default 1s) whenever
     // it thinks the socket is idle — a check based on `bytesWritten` that is
-    // unreliable under Bun, so the HMR socket was killed ~1s after every
+    // unreliable under Bun, so the HMR socket was stopped ~1s after every
     // connect and the Vite client full-reloaded the page in a loop.
     destroyUpgrade: false
   });
