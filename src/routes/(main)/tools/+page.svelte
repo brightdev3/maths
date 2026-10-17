@@ -1,138 +1,125 @@
 <script lang="ts">
-  import { Header } from "$lib/components/ui/header";
-  import { Brain, Calculator, CircleDot, Gamepad2, Pencil, Radio, Zap } from "@lucide/svelte/icons";
+  import { ArrowUpRight, Brain, Calculator, CircleDot, Gamepad2, Pencil, Radio, Zap } from "@lucide/svelte/icons";
 
-  interface Game {
+  interface Entry {
     name: string;
     description: string;
     url: string;
-    colour: string;
+    tag: string;
     icon: typeof Gamepad2;
   }
 
-  const games: Game[] = [
+  const games: Entry[] = [
     {
       name: "Digitle",
-      description: "A game where you guess a 5-digit number with a limited number of attempts.",
+      description: "Guess a five-digit number in six attempts, with colour-coded feedback after every move.",
       url: "/tools/digitle",
-      colour:
-        "bg-orange-500/10 text-orange-600 border-orange-200 hover:border-orange-400 dark:bg-orange-500/20 dark:text-orange-400 dark:border-orange-800",
+      tag: "Daily puzzle",
       icon: Gamepad2
     },
     {
       name: "Basic Facts",
-      description: "Beat the clock with arithmetic, multiplication, powers, and square roots.",
+      description: "Sixty seconds of arithmetic, multiplication, powers and roots against the clock.",
       url: "/tools/basic-facts",
-      colour:
-        "bg-amber-500/10 text-amber-600 border-amber-200 hover:border-amber-400 dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-800",
+      tag: "Timed drill",
       icon: Zap
     },
     {
       name: "Sequencing",
-      description: "Read increasingly challenging number patterns and choose the next value.",
+      description: "Read increasingly devious number patterns and choose the value that comes next.",
       url: "/tools/sequencing",
-      colour:
-        "bg-violet-500/10 text-violet-600 border-violet-200 hover:border-violet-400 dark:bg-violet-500/20 dark:text-violet-400 dark:border-violet-800",
+      tag: "Pattern hunt",
       icon: Brain
     },
     {
       name: "Factor Finder",
-      description: "Test your divisibility skills by finding every factor of a target number.",
+      description: "Test your divisibility instincts by finding every factor of the target number.",
       url: "/tools/factor-finder",
-      colour:
-        "bg-emerald-500/10 text-emerald-600 border-emerald-200 hover:border-emerald-400 dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-800",
+      tag: "Divisibility",
       icon: CircleDot
     },
     {
       name: "24 Game",
-      description: "Use all four numbers and the four operations to make exactly 24.",
+      description: "Combine four numbers with +, −, × and ÷ to make exactly 24 — solo or against friends.",
       url: "/tools/24-game",
-      colour:
-        "bg-sky-500/10 text-sky-600 border-sky-200 hover:border-sky-400 dark:bg-sky-500/20 dark:text-sky-400 dark:border-sky-800",
+      tag: "Arithmetic",
       icon: Calculator
+    }
+  ];
+
+  const toolkit: Entry[] = [
+    {
+      name: "Mathex Set Editor",
+      description: "Write and arrange question sets for a Mathex round, with live collaboration.",
+      url: "/mathex/app/create/editor",
+      tag: "Authoring",
+      icon: Pencil
+    },
+    {
+      name: "Mathex Live Dashboard",
+      description: "Score a physical Mathex competition in real time and project the standings.",
+      url: "/mathex/app/live",
+      tag: "Scorekeeping",
+      icon: Radio
     }
   ];
 </script>
 
-<div class="py-12">
+<div class="py-12 sm:py-16">
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-    <div class="mx-auto max-w-2xl lg:mx-0">
-      <Header size="h1">Tools</Header>
-      <p class="mt-2 text-lg text-muted-foreground">Play games and build Mathex question sets.</p>
-    </div>
-    <div class="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {#each games as game}
+    <header
+      class="flex flex-col gap-5 border-b-2 border-foreground/85 pb-8 sm:flex-row sm:items-end sm:justify-between"
+    >
+      <div>
+        <p class="mathex-kicker">The cabinet</p>
+        <h1 class="mt-3 font-display text-5xl font-bold sm:text-6xl">Tools</h1>
+      </div>
+      <p class="max-w-sm text-sm leading-6 text-muted-foreground">
+        Play games built for quick thinking, or set up a Mathex competition of your own.
+      </p>
+    </header>
+
+    {#snippet entryRow(entry: Entry)}
+      <li>
         <a
-          href={game.url}
-          class="group relative rounded-xl border border-border/60 bg-card p-6 shadow-sm transition-all hover:shadow-md hover:border-primary/20"
+          href={entry.url}
+          class="group grid grid-cols-[2.5rem_1fr_auto] items-center gap-x-4 border-b border-border py-5 transition-colors hover:bg-accent/70 sm:gap-x-8 sm:py-6"
         >
-          <div class="flex items-center gap-3">
-            <div class="flex h-10 w-10 items-center justify-center rounded-lg {game.colour}">
-              <game.icon class="h-5 w-5" />
+          <span
+            class="flex h-10 w-10 items-center justify-center border border-border bg-card text-muted-foreground transition-colors group-hover:border-foreground/40 group-hover:text-primary"
+          >
+            <entry.icon class="h-5 w-5" />
+          </span>
+          <div>
+            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h2 class="font-display text-xl font-bold leading-snug transition-colors group-hover:text-primary">
+                {entry.name}
+              </h2>
+              <span class="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                {entry.tag}
+              </span>
             </div>
-            <h3 class="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
-              {game.name}
-            </h3>
+            <p class="mt-1.5 max-w-2xl text-sm leading-6 text-muted-foreground">{entry.description}</p>
           </div>
-          <p class="mt-3 text-sm text-muted-foreground">{game.description}</p>
-          <div
-            class="mt-4 flex items-center text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100"
-          >
-            Play now
-            <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
+          <ArrowUpRight
+            class="h-5 w-5 justify-self-end text-muted-foreground transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary"
+          />
         </a>
+      </li>
+    {/snippet}
+
+    <p class="mathex-kicker mt-12">Games</p>
+    <ul class="mt-4 border-t border-border">
+      {#each games as game}
+        {@render entryRow(game)}
       {/each}
-      <a
-        href="/mathex/app/create/editor"
-        class="group relative rounded-xl border border-border/60 bg-card p-6 shadow-sm transition-all hover:shadow-md hover:border-primary/20"
-      >
-        <div class="flex items-center gap-3">
-          <div
-            class="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 border-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:border-rose-800"
-          >
-            <Pencil class="h-5 w-5" />
-          </div>
-          <h3 class="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
-            Mathex Set Editor
-          </h3>
-        </div>
-        <p class="mt-3 text-sm text-muted-foreground">Create and edit question sets for a Mathex round.</p>
-        <div
-          class="mt-4 flex items-center text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100"
-        >
-          Open editor
-          <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-          </svg>
-        </div>
-      </a>
-      <a
-        href="/mathex/app/live"
-        class="group relative rounded-xl border border-border/60 bg-card p-6 shadow-sm transition-all hover:border-primary/20 hover:shadow-md"
-      >
-        <div class="flex items-center gap-3">
-          <div
-            class="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-200 bg-cyan-500/10 text-cyan-600 dark:border-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-400"
-          >
-            <Radio class="h-5 w-5" />
-          </div>
-          <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-primary">
-            Mathex Live Dashboard
-          </h3>
-        </div>
-        <p class="mt-3 text-sm text-muted-foreground">Score and project a physical Mathex competition in real time.</p>
-        <div
-          class="mt-4 flex items-center text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100"
-        >
-          Set up dashboard
-          <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"
-            ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg
-          >
-        </div>
-      </a>
-    </div>
+    </ul>
+
+    <p class="mathex-kicker mt-12">Mathex toolkit</p>
+    <ul class="mt-4 border-t border-border">
+      {#each toolkit as entry}
+        {@render entryRow(entry)}
+      {/each}
+    </ul>
   </div>
 </div>

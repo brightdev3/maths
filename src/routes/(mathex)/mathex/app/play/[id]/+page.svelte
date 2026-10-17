@@ -381,7 +381,7 @@
             <Label for="name" class="text-sm font-medium">Your name</Label>
             <Input bind:value={name} type="text" placeholder="Enter your name" maxlength={20} />
           </div>
-          <Button type="submit" class="mt-5 w-full shadow-lg shadow-primary/20" size="lg">Join competition</Button>
+          <Button type="submit" class="mt-5 w-full" size="lg">Join competition</Button>
         </form>
       </div>
     </div>
@@ -523,7 +523,7 @@
               <div class="mb-7 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
                 <Flag class="h-3.5 w-3.5" /> Problem {currentQuestion.number}
               </div>
-              <div class="question-content prose prose-slate max-w-none dark:prose-invert">
+              <div class="question-content prose prose-stone max-w-none dark:prose-invert">
                 {@html renderMath(currentQuestion.content)}
               </div>
               <form
@@ -562,7 +562,7 @@
                 <div class="mt-4">
                   <Button
                     type="submit"
-                    class="w-full shadow-lg shadow-primary/20"
+                    class="w-full"
                     size="lg"
                     disabled={currentQuestion.requireAllSolutionGroups
                       ? answers.some((value) => value === null || value === "")

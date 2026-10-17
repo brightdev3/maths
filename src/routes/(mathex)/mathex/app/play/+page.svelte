@@ -49,9 +49,7 @@
       ><ArrowLeft class="h-4 w-4" /> Competition home</a
     >
     <div class="mathex-panel rounded-3xl p-6 sm:p-9">
-      <div
-        class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-      >
+      <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
         <KeyRound class="h-6 w-6" />
       </div>
       <p class="mathex-kicker mt-7">Player check-in</p>

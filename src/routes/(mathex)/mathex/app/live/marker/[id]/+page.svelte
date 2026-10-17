@@ -204,7 +204,7 @@
                   focusedTeam.currentQuestion > snapshot.questionCount}><X class="h-5 w-5" /> Wrong</Button
               >
               <Button
-                class="h-16 gap-1 bg-amber-500 text-base text-slate-950 hover:bg-amber-400 sm:h-20 sm:text-lg"
+                class="h-16 gap-1 bg-amber-500 text-base text-amber-950 hover:bg-amber-400 sm:h-20 sm:text-lg"
                 onclick={() => mark(focusedTeam.id, "skip")}
                 disabled={!connected ||
                   busyTeams.has(focusedTeam.id) ||
@@ -334,7 +334,7 @@
                   >
                   <Button
                     size="sm"
-                    class="bg-amber-500 px-2 text-slate-950 hover:bg-amber-400"
+                    class="bg-amber-500 px-2 text-amber-950 hover:bg-amber-400"
                     aria-label="Skip for {team.name}"
                     onclick={() => mark(team.id, "skip")}
                     disabled={!connected ||

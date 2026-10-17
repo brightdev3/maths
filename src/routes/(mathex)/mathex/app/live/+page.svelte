@@ -204,7 +204,7 @@
           <TeamEditor bind:teams disabled={creating} />
         </section>
 
-        <Button type="submit" size="lg" class="h-12 w-full text-base shadow-lg shadow-primary/20" disabled={!canCreate}>
+        <Button type="submit" size="lg" class="h-12 w-full text-base" disabled={!canCreate}>
           {creating ? "Creating dashboard..." : "Create live dashboard"}
         </Button>
       </form>

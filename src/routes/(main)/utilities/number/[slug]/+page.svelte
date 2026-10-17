@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from "./$types";
   import latex from "$lib/latex";
+  import { ArrowLeft } from "@lucide/svelte/icons";
 
   interface Props {
     data: PageData;
@@ -159,24 +160,39 @@
   ];
 </script>
 
-<div class="py-12">
+<div class="py-12 sm:py-16">
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-    <div class="text-center">
-      <div
-        class="mx-auto flex h-20 w-fit min-w-20 items-center justify-center rounded-2xl bg-primary/10 px-4 text-primary"
-      >
-        <span class="text-3xl font-bold tabular-nums">{data.n}</span>
-      </div>
-      <p class="mt-4 text-sm text-muted-foreground">Number properties</p>
-    </div>
+    <a
+      href="/utilities/number"
+      class="inline-flex items-center gap-1.5 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-primary"
+    >
+      <ArrowLeft class="h-3.5 w-3.5" /> New search
+    </a>
 
-    <div class="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <header class="mt-8 grid items-end gap-8 sm:grid-cols-[auto_1fr]">
+      <div class="border border-foreground/25 bg-card px-6 py-5">
+        <p class="mathex-kicker">Specimen</p>
+        <p class="mt-2 font-display text-6xl font-bold tabular-nums leading-none sm:text-7xl">{data.n}</p>
+      </div>
+      <div class="pb-1">
+        <h1 class="font-display text-3xl font-bold sm:text-4xl">
+          Properties of {data.n}<span class="text-primary">.</span>
+        </h1>
+        <p class="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
+          Verified on the spot — no tables, no rounding, just arithmetic.
+        </p>
+      </div>
+    </header>
+
+    <dl class="mt-12 border-t-2 border-foreground/85">
       {#each properties as property}
-        <div class="rounded-xl border border-border/60 bg-card p-5 shadow-sm transition-all hover:shadow-md">
-          <span class="text-sm font-medium text-primary">{@html property.header}</span>
-          <p class="mt-2 text-sm text-muted-foreground">{@html property.fn(data.n)}</p>
+        <div
+          class="grid gap-1.5 border-b border-border py-4 sm:grid-cols-[minmax(0,22rem)_1fr] sm:items-baseline sm:gap-8 sm:py-5"
+        >
+          <dt class="text-sm font-semibold leading-6">{@html property.header}</dt>
+          <dd class="font-mono text-sm leading-6 text-muted-foreground">{@html property.fn(data.n)}</dd>
         </div>
       {/each}
-    </div>
+    </dl>
   </div>
 </div>

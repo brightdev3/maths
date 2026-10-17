@@ -15,7 +15,7 @@
     Game24RoomSummary,
     Game24ServerToClientEvents
   } from "$lib/game24/schemas";
-  import { Calculator, Lock, Plus, RefreshCw, Swords, Timer, Users, Zap } from "@lucide/svelte/icons";
+  import { Lock, Plus, RefreshCw, Swords, Timer, Users, Zap } from "@lucide/svelte/icons";
 
   const socket: Socket<Game24ServerToClientEvents, Game24ClientToServerEvents> = io("/game24", {
     forceNew: true,
@@ -175,24 +175,20 @@
 
 <div class="mathex-shell relative isolate min-h-full overflow-hidden py-8 sm:py-12">
   <div class="mathex-grid pointer-events-none absolute inset-x-0 top-0 h-[32rem] opacity-65"></div>
-  <div class="pointer-events-none absolute -right-24 top-40 h-72 w-72 rounded-full bg-primary/10 blur-3xl"></div>
 
   <div class="relative mx-auto max-w-6xl px-4 sm:px-6">
     <header class="text-center">
-      <a
-        href="/tools/24-game"
-        class="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/75 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-primary backdrop-blur-sm"
-      >
-        <Calculator class="h-3.5 w-3.5" /> 24 Game
-      </a>
-      <h1 class="mt-5 text-5xl font-bold tracking-[-0.06em] sm:text-6xl">
+      <p class="mathex-kicker">
+        <a href="/tools/24-game" class="underline-offset-4 hover:underline">24 Game</a> · Live
+      </p>
+      <h1 class="mt-4 font-display text-5xl font-bold sm:text-6xl">
         Live games<span class="text-primary">.</span>
       </h1>
       <p class="mt-3 text-muted-foreground sm:text-lg">
         Challenge someone to a 1v1 or open a room. Jump into any game below, or start your own.
       </p>
       <span
-        class="mt-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold {connected
+        class="mt-4 inline-flex items-center gap-2 rounded-[2px] px-2.5 py-1 font-mono text-[0.68rem] font-bold uppercase tracking-[0.16em] {connected
           ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
           : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'}"
       >
@@ -201,7 +197,7 @@
       </span>
     </header>
 
-    <div class="mt-8 rounded-3xl border border-border/70 bg-card/70 p-4 backdrop-blur-sm sm:p-5">
+    <div class="mt-8 border border-border/70 bg-card p-4 sm:p-5">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div class="w-full sm:max-w-xs">
           <Label for="lobby-name" class="text-sm font-medium">Your name</Label>
@@ -481,7 +477,7 @@
             {/if}
           </div>
 
-          <Button type="submit" size="lg" class="w-full shadow-lg shadow-primary/20" disabled={creating || !connected}>
+          <Button type="submit" size="lg" class="w-full" disabled={creating || !connected}>
             {creating ? "Creating…" : "Create & enter"}
           </Button>
         </form>

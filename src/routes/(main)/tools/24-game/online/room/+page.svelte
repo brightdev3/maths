@@ -283,7 +283,7 @@
               <Input id="join-password" type="password" maxlength={60} bind:value={password} />
             </div>
           {/if}
-          <Button type="submit" class="w-full shadow-lg shadow-primary/20" size="lg" disabled={!connected}>
+          <Button type="submit" class="w-full" size="lg" disabled={!connected}>
             {needPassword ? "Join with password" : "Join"}
           </Button>
           <Button type="button" variant="ghost" class="w-full" href="/tools/24-game/online">Back to lobby</Button>
@@ -292,7 +292,9 @@
     </div>
   {:else if !snapshot}
     <div class="flex min-h-[calc(100vh-3rem)] items-center justify-center">
-      <span class="mathex-panel flex items-center gap-3 rounded-2xl px-5 py-4 text-lg font-medium text-muted-foreground">
+      <span
+        class="mathex-panel flex items-center gap-3 rounded-2xl px-5 py-4 text-lg font-medium text-muted-foreground"
+      >
         <LoaderCircle class="h-5 w-5 animate-spin" /> Loading room…
       </span>
     </div>
@@ -356,7 +358,12 @@
                   : "Starting…"}
               </p>
             {:else}
-              <Button class="w-full gap-2" size="lg" onclick={start} disabled={!connected || snapshot.players.length < 2}>
+              <Button
+                class="w-full gap-2"
+                size="lg"
+                onclick={start}
+                disabled={!connected || snapshot.players.length < 2}
+              >
                 <CirclePlay class="h-4 w-4" /> Start game
               </Button>
               <p class="mt-2 text-center text-xs text-muted-foreground">
@@ -487,7 +494,12 @@
                   : "Next round"
                 : "Skip to next round"}
             </Button>
-            <Button variant="destructive" class="gap-2" onclick={() => (confirmFinishOpen = true)} disabled={!connected}>
+            <Button
+              variant="destructive"
+              class="gap-2"
+              onclick={() => (confirmFinishOpen = true)}
+              disabled={!connected}
+            >
               <Flag class="h-4 w-4" /> End game
             </Button>
           </div>
@@ -518,7 +530,7 @@
             {:else if snapshot.hit?.playerId === playerId}
               <span class="text-sm font-semibold text-primary">Quick — show your solution!</span>
             {:else}
-              <Button size="lg" class="gap-2 shadow-lg shadow-primary/20" onclick={hit} disabled={!!snapshot.hit}>
+              <Button size="lg" class="gap-2" onclick={hit} disabled={!!snapshot.hit}>
                 <Zap class="h-4 w-4" /> Hit!
               </Button>
             {/if}
@@ -537,8 +549,7 @@
               </p>
             {:else if snapshot.mode === "hit" && snapshot.hit && snapshot.hit.playerId !== playerId}
               <p class="text-center text-sm font-semibold text-muted-foreground">
-                {snapshot.players.find((player) => player.id === snapshot?.hit?.playerId)?.name ?? "Someone"} has the
-                floor…
+                {snapshot.players.find((player) => player.id === snapshot?.hit?.playerId)?.name ?? "Someone"} has the floor…
               </p>
             {/if}
             <div class="mt-2">
@@ -563,7 +574,9 @@
           <Header size="h2" class="mt-1 text-3xl">{snapshot.players[0]?.name ?? "Nobody"} wins!</Header>
           {#if isOwner}
             <div class="mt-6 flex flex-wrap justify-center gap-2">
-              <Button class="gap-2" onclick={restart} disabled={!connected}><CirclePlay class="h-4 w-4" /> Play again</Button>
+              <Button class="gap-2" onclick={restart} disabled={!connected}
+                ><CirclePlay class="h-4 w-4" /> Play again</Button
+              >
               <Button variant="outline" class="gap-2" onclick={leave}><LogOut class="h-4 w-4" /> Leave</Button>
             </div>
           {:else}
@@ -577,7 +590,8 @@
 
       <section class="mathex-panel mt-4 rounded-3xl p-5">
         <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
-          <Trophy class="h-3.5 w-3.5" /> {snapshot.state === "finished" ? "Final standings" : "Standings"}
+          <Trophy class="h-3.5 w-3.5" />
+          {snapshot.state === "finished" ? "Final standings" : "Standings"}
         </div>
         <div class="mt-3 grid gap-1.5">
           {#each snapshot.players as player, index (player.id)}

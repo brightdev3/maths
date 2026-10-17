@@ -978,7 +978,7 @@
         >
         <button
           type="button"
-          class="group flex items-center gap-3 rounded-xl bg-primary px-4 py-2.5 text-primary-foreground shadow-lg shadow-primary/20"
+          class="group flex items-center gap-3 rounded-xl bg-primary px-4 py-2.5 text-primary-foreground"
           onclick={copyRoomCode}
           ><span class="text-2xl font-bold tracking-[0.08em] sm:text-3xl">{roomId}</span><Copy
             class="h-4 w-4 opacity-75 transition-opacity group-hover:opacity-100"
@@ -1235,7 +1235,7 @@
             currentState = "finished";
           }
         }}
-        class="w-full shadow-lg shadow-primary/20 sm:w-auto"
+        class="w-full sm:w-auto"
         size="lg">{currentState === "lobby" ? "Start" : "Finish"} Game</Button
       >
     {/if}

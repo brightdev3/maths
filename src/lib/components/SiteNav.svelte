@@ -12,36 +12,41 @@
   let mobileOpen = $state(false);
 </script>
 
-<nav
-  class="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75"
->
+<nav class="sticky top-0 z-50 w-full border-b-2 border-foreground/85 bg-background">
+  <div class="tiger-stripes h-1 w-full" aria-hidden="true"></div>
   <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-    <a href="/" class="flex items-center gap-2 text-lg font-semibold tracking-tight">
+    <a href="/" class="group flex items-center gap-2.5">
       <span
-        class="flex h-8 w-8 items-center justify-center border border-primary bg-primary text-primary-foreground text-base font-bold leading-none"
-        ><PawPrint class="h-4 w-4" /></span
+        class="flex h-9 w-9 items-center justify-center bg-foreground text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
       >
-      Tiger Maths
+        <PawPrint class="h-5 w-5" />
+      </span>
+      <span class="font-display text-xl font-bold leading-none tracking-tight">Tiger Maths</span>
     </a>
+
     <div class="hidden md:flex md:items-center md:gap-1">
       {#each links as link}
+        {@const active = page.url.pathname.startsWith(link.url)}
         <a
           href={link.url}
-          aria-current={page.url.pathname.startsWith(link.url) ? "page" : undefined}
-          class={`border-b-2 px-3 py-2 text-sm font-medium transition-colors hover:text-foreground ${page.url.pathname.startsWith(link.url) ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+          aria-current={active ? "page" : undefined}
+          class={`relative px-3 py-2 font-mono text-xs font-semibold uppercase tracking-[0.18em] transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary after:transition-transform ${active ? "text-foreground after:scale-x-100" : "text-muted-foreground after:scale-x-0 hover:text-foreground hover:after:scale-x-100"}`}
           >{link.text}</a
         >
       {/each}
-      <ThemeToggle />
-      <a
-        href="https://github.com/brightdev3/maths"
-        target="_blank"
-        class="ml-1 rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-        aria-label="GitHub repository"><Github class="h-5 w-5" /></a
-      >
+      <div class="ml-3 flex items-center gap-1.5 border-l border-border pl-3">
+        <ThemeToggle />
+        <a
+          href="https://github.com/brightdev3/maths"
+          target="_blank"
+          class="flex h-9 w-9 items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+          aria-label="GitHub repository"><Github class="h-5 w-5" /></a
+        >
+      </div>
     </div>
+
     <button
-      class="md:hidden rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+      class="flex h-10 w-10 items-center justify-center text-foreground md:hidden"
       onclick={() => (mobileOpen = !mobileOpen)}
       aria-label="Toggle navigation menu"
       aria-expanded={mobileOpen}
@@ -50,22 +55,26 @@
     </button>
   </div>
   {#if mobileOpen}
-    <div class="md:hidden border-t border-border/40 bg-background/95 backdrop-blur">
-      <div class="space-y-1 px-4 pb-3 pt-2">
+    <div class="border-t border-border bg-background md:hidden">
+      <div class="divide-y divide-border px-4 pb-4 pt-1">
         {#each links as link}
+          {@const active = page.url.pathname.startsWith(link.url)}
           <a
             href={link.url}
-            aria-current={page.url.pathname.startsWith(link.url) ? "page" : undefined}
-            class={`block rounded-md px-3 py-2 text-base font-medium transition-colors ${page.url.pathname.startsWith(link.url) ? "text-primary bg-accent" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}
-            onclick={() => (mobileOpen = false)}>{link.text}</a
+            aria-current={active ? "page" : undefined}
+            class={`flex items-center justify-between px-1 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] ${active ? "text-primary" : "text-muted-foreground"}`}
+            onclick={() => (mobileOpen = false)}
           >
+            {link.text}
+            <span class="text-xs text-border" aria-hidden="true">→</span>
+          </a>
         {/each}
-        <div class="flex items-center gap-2 pt-2">
+        <div class="flex items-center gap-3 pt-4">
           <ThemeToggle />
           <a
             href="https://github.com/brightdev3/maths"
             target="_blank"
-            class="flex items-center gap-2 rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            class="flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground"
             ><Github class="h-5 w-5" /> GitHub</a
           >
         </div>

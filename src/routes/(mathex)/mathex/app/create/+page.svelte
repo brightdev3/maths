@@ -6,11 +6,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { toast } from "svelte-sonner";
-  import {
-    CHAT_DISCLAIMER,
-    dismissChatDisclaimer,
-    hasDismissedChatDisclaimer
-  } from "$lib/mathex/chat-disclaimer";
+  import { CHAT_DISCLAIMER, dismissChatDisclaimer, hasDismissedChatDisclaimer } from "$lib/mathex/chat-disclaimer";
 
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Clock3 from "@lucide/svelte/icons/clock-3";
@@ -454,8 +450,7 @@
                         <div class="flex items-start gap-2.5">
                           <Checkbox id="allow-calculator" bind:checked={allowCalculator} />
                           <div>
-                            <Label for="allow-calculator" class="cursor-pointer text-sm font-semibold"
-                              >Calculator</Label
+                            <Label for="allow-calculator" class="cursor-pointer text-sm font-semibold">Calculator</Label
                             >
                             <p class="mt-1 text-xs leading-5 text-muted-foreground">
                               Floating scientific calculator for players.
@@ -497,7 +492,7 @@
               {/if}
             </div>
 
-            <Button type="submit" class="mt-2 w-full shadow-lg shadow-primary/20" size="lg" disabled={!canCreate}>
+            <Button type="submit" class="mt-2 w-full" size="lg" disabled={!canCreate}>
               {creating ? "Creating…" : "Create Room"}
             </Button>
           </form>

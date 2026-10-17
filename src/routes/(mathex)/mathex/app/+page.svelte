@@ -17,11 +17,11 @@
           Run a polished Mathex round from one host console, or join a live room and race through every question.
         </p>
         <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Button href="/mathex/app/play" size="lg" class="gap-2.5 shadow-lg shadow-primary/20">
+          <Button href="/mathex/app/play" size="lg" class="gap-2.5">
             <CirclePlay class="h-5 w-5" />
             Join a competition
           </Button>
-          <Button href="/mathex/app/create" size="lg" variant="outline" class="gap-2.5 bg-card/60">
+          <Button href="/mathex/app/create" size="lg" variant="outline" class="gap-2.5">
             Host a room
             <ArrowUpRight class="h-4 w-4" />
           </Button>
@@ -34,51 +34,47 @@
         </a>
       </div>
 
-      <div class="mathex-panel relative overflow-hidden rounded-3xl p-5 sm:p-7">
-        <div class="absolute right-0 top-0 h-32 w-32 rounded-full bg-primary/15 blur-3xl"></div>
-        <div class="relative flex items-start justify-between">
-          <div>
-            <p class="mathex-kicker">Built for the round</p>
-            <h2 class="mt-1 text-xl font-semibold">Everything stays in sync.</h2>
+      <aside class="border border-foreground/25 bg-card">
+        <div class="tiger-stripes h-1 w-full" aria-hidden="true"></div>
+        <div class="p-5 sm:p-7">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="mathex-kicker">Built for the round</p>
+              <h2 class="mt-2 font-display text-xl font-bold">Everything stays in sync.</h2>
+            </div>
+            <Calculator class="h-6 w-6 shrink-0 text-primary" />
           </div>
-          <span class="rounded-xl bg-primary/10 p-2.5 text-primary"><Calculator class="h-5 w-5" /></span>
+          <ul class="mt-6 divide-y divide-border border-t border-border">
+            <li class="flex gap-3.5 py-4">
+              <FileQuestion class="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+              <div>
+                <p class="text-sm font-semibold">One question at a time</p>
+                <p class="mt-0.5 text-sm leading-5 text-muted-foreground">
+                  Players focus on the next problem while the host sees progress as it happens.
+                </p>
+              </div>
+            </li>
+            <li class="flex gap-3.5 py-4">
+              <Timer class="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+              <div>
+                <p class="text-sm font-semibold">A pace you control</p>
+                <p class="mt-0.5 text-sm leading-5 text-muted-foreground">
+                  Set the time between submissions to match your format.
+                </p>
+              </div>
+            </li>
+            <li class="flex gap-3.5 py-4">
+              <ShieldCheck class="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+              <div>
+                <p class="text-sm font-semibold">Fair play signals</p>
+                <p class="mt-0.5 text-sm leading-5 text-muted-foreground">
+                  Optionally record when a player leaves the competition tab.
+                </p>
+              </div>
+            </li>
+          </ul>
         </div>
-        <div class="mt-7 space-y-3">
-          <div class="flex gap-3 rounded-2xl border border-border/70 bg-background/50 p-4">
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
-              ><FileQuestion class="h-4 w-4" /></span
-            >
-            <div>
-              <p class="text-sm font-semibold">One question at a time</p>
-              <p class="mt-0.5 text-sm leading-5 text-muted-foreground">
-                Players focus on the next problem while the host sees progress as it happens.
-              </p>
-            </div>
-          </div>
-          <div class="flex gap-3 rounded-2xl border border-border/70 bg-background/50 p-4">
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
-              ><Timer class="h-4 w-4" /></span
-            >
-            <div>
-              <p class="text-sm font-semibold">A pace you control</p>
-              <p class="mt-0.5 text-sm leading-5 text-muted-foreground">
-                Set the time between submissions to match your format.
-              </p>
-            </div>
-          </div>
-          <div class="flex gap-3 rounded-2xl border border-border/70 bg-background/50 p-4">
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
-              ><ShieldCheck class="h-4 w-4" /></span
-            >
-            <div>
-              <p class="text-sm font-semibold">Fair play signals</p>
-              <p class="mt-0.5 text-sm leading-5 text-muted-foreground">
-                Optionally record when a player leaves the competition tab.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      </aside>
     </section>
   </main>
 </div>
