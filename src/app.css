@@ -49,33 +49,33 @@
 }
 
 :root {
-  /* Warm paper + ink, burnt orange and moss green. */
-  --background: oklch(0.974 0.007 88);
+  /* Very light green paper + ink, burnt orange and moss accents. */
+  --background: oklch(0.965 0.021 133);
   --foreground: oklch(0.245 0.022 55);
-  --muted: oklch(0.943 0.009 85);
-  --muted-foreground: oklch(0.505 0.028 62);
-  --popover: oklch(0.993 0.004 90);
+  --muted: oklch(0.935 0.024 132);
+  --muted-foreground: oklch(0.495 0.026 70);
+  --popover: oklch(0.993 0.006 125);
   --popover-foreground: oklch(0.245 0.022 55);
-  --card: oklch(0.993 0.004 90);
+  --card: oklch(0.993 0.006 125);
   --card-foreground: oklch(0.245 0.022 55);
-  --border: oklch(0.852 0.016 78);
-  --input: oklch(0.852 0.016 78);
+  --border: oklch(0.85 0.022 125);
+  --input: oklch(0.85 0.022 125);
   --primary: oklch(0.575 0.186 41);
   --primary-foreground: oklch(0.985 0.009 90);
   --secondary: oklch(0.372 0.055 133);
   --secondary-foreground: oklch(0.975 0.01 95);
-  --accent: oklch(0.929 0.023 82);
+  --accent: oklch(0.925 0.032 135);
   --accent-foreground: oklch(0.28 0.03 58);
   --destructive: oklch(0.55 0.2 27);
   --destructive-foreground: oklch(0.985 0.004 90);
   --ring: oklch(0.575 0.186 41);
-  --sidebar: oklch(0.955 0.009 86);
+  --sidebar: oklch(0.95 0.02 133);
   --sidebar-foreground: oklch(0.245 0.022 55);
   --sidebar-primary: oklch(0.575 0.186 41);
   --sidebar-primary-foreground: oklch(0.985 0.009 90);
-  --sidebar-accent: oklch(0.929 0.023 82);
+  --sidebar-accent: oklch(0.925 0.032 135);
   --sidebar-accent-foreground: oklch(0.28 0.03 58);
-  --sidebar-border: oklch(0.852 0.016 78);
+  --sidebar-border: oklch(0.85 0.022 125);
   --sidebar-ring: oklch(0.575 0.186 41);
   --keyboard-background: #ece7dd;
   --keyboard-border: #d5cec0;
@@ -189,39 +189,9 @@
 }
 
 @layer utilities {
-  /* Irregular stripes borrowed from the page's namesake. Use sparingly. */
-  .tiger-stripes {
-    background-image: repeating-linear-gradient(
-      103deg,
-      var(--primary) 0px,
-      var(--primary) 7px,
-      transparent 7px,
-      transparent 15px,
-      var(--primary) 15px,
-      var(--primary) 28px,
-      transparent 28px,
-      transparent 34px,
-      var(--primary) 34px,
-      var(--primary) 39px,
-      transparent 39px,
-      transparent 56px
-    );
-  }
-
-  /* Squared exercise-book paper for page shells. */
+  /* Plain tinted paper for page shells. */
   .mathex-shell {
     background-color: var(--background);
-    background-image: radial-gradient(color-mix(in oklch, var(--foreground) 8%, transparent) 1px, transparent 1.2px);
-    background-size: 22px 22px;
-  }
-
-  /* Graph-paper fade used behind hero headers. */
-  .mathex-grid {
-    background-image:
-      linear-gradient(color-mix(in oklch, var(--foreground) 9%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in oklch, var(--foreground) 9%, transparent) 1px, transparent 1px);
-    background-size: 28px 28px;
-    mask-image: linear-gradient(to bottom, black, transparent 72%);
   }
 
   /* Flat, inked panels. No glass, no float. */

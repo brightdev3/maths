@@ -21,7 +21,6 @@
       <h1 class="mt-4 font-display text-5xl font-bold leading-[1.05] sm:text-6xl">
         Every number has a character of its own.
       </h1>
-      <div class="tiger-stripes mt-7 h-1.5 w-36" aria-hidden="true"></div>
       <p class="mt-7 max-w-lg text-base leading-7 text-muted-foreground">
         Type in any whole number and we will pull it apart — factors, primality, patterns and oddities.
       </p>

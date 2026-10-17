@@ -13,7 +13,6 @@
 </script>
 
 <nav class="sticky top-0 z-50 w-full border-b-2 border-foreground/85 bg-background">
-  <div class="tiger-stripes h-1 w-full" aria-hidden="true"></div>
   <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
     <a href="/" class="group flex items-center gap-2.5">
       <span

@@ -174,8 +174,6 @@
 <svelte:head><title>24 Game - Play online</title></svelte:head>
 
 <div class="mathex-shell relative isolate min-h-full overflow-hidden py-8 sm:py-12">
-  <div class="mathex-grid pointer-events-none absolute inset-x-0 top-0 h-[32rem] opacity-65"></div>
-
   <div class="relative mx-auto max-w-6xl px-4 sm:px-6">
     <header class="text-center">
       <p class="mathex-kicker">

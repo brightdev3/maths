@@ -41,7 +41,6 @@
 </script>
 
 <div class="mathex-shell relative flex min-h-full items-center justify-center overflow-hidden p-4">
-  <div class="mathex-grid pointer-events-none absolute inset-0 opacity-70"></div>
   <main class="relative w-full max-w-lg">
     <a
       href="/mathex/app"

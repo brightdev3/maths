@@ -5,7 +5,6 @@
 </script>
 
 <div class="mathex-shell relative min-h-full overflow-hidden px-4 py-5 sm:px-8 sm:py-8">
-  <div class="mathex-grid pointer-events-none absolute inset-0 opacity-70"></div>
   <main class="relative mx-auto max-w-6xl">
     <section class="grid items-center gap-10 py-16 lg:grid-cols-[1.15fr_0.85fr] lg:py-20">
       <div>
@@ -35,7 +34,6 @@
       </div>
 
       <aside class="border border-foreground/25 bg-card">
-        <div class="tiger-stripes h-1 w-full" aria-hidden="true"></div>
         <div class="p-5 sm:p-7">
           <div class="flex items-start justify-between gap-4">
             <div>

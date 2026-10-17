@@ -19,15 +19,12 @@
 </script>
 
 <section class="mathex-shell relative isolate overflow-hidden">
-  <div class="mathex-grid pointer-events-none absolute inset-x-0 top-0 h-[28rem] opacity-70"></div>
-
   <div class="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
     <div class="max-w-3xl">
       <p class="mathex-kicker">Live competition software</p>
       <h1 class="mt-4 font-display text-5xl font-bold leading-[1.02] sm:text-6xl lg:text-7xl">
         Mathex, run end to end.
       </h1>
-      <div class="tiger-stripes mt-8 h-1.5 w-36" aria-hidden="true"></div>
       <p class="mt-8 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
         An application for Mathex-style events: write the questions, run the rounds live, and keep the room honest with
         a scoreboard that updates as answers land.

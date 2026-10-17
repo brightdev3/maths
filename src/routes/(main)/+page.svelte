@@ -28,8 +28,6 @@
 </script>
 
 <section class="mathex-shell relative isolate overflow-hidden">
-  <div class="mathex-grid pointer-events-none absolute inset-x-0 top-0 h-[34rem] opacity-70"></div>
-
   <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <div class="grid lg:grid-cols-[1.15fr_0.85fr]">
       <div class="py-12 sm:py-16 lg:border-r lg:border-border lg:py-20 lg:pr-14">
@@ -37,7 +35,6 @@
         <h1 class="mt-5 max-w-3xl font-display text-5xl font-bold leading-[0.98] sm:text-7xl lg:text-8xl">
           Mathematics,<br />worth lingering over.
         </h1>
-        <div class="tiger-stripes mt-8 h-1.5 w-44" aria-hidden="true"></div>
         <p class="mt-8 max-w-lg text-base leading-7 text-muted-foreground sm:text-lg">
           Explore interesting number facts, play games built around quick thinking, and put your accuracy to the test in
           a live Mathex round.
@@ -59,7 +56,6 @@
         <p class="mathex-kicker">Specimen of the day</p>
         <figure class="mt-5 border border-foreground/25 bg-card">
           <figcaption>
-            <div class="tiger-stripes h-1 w-full" aria-hidden="true"></div>
             <div class="flex items-baseline justify-between border-b border-border px-4 py-3">
               <span class="font-mono text-xs font-semibold uppercase tracking-[0.18em]">Pi</span>
               <span class="font-mono text-[0.68rem] text-muted-foreground">Irrational · Transcendental</span>
