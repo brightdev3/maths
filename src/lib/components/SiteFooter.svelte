@@ -10,7 +10,7 @@
     <div class="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
       <div class="max-w-md">
         <div class="flex items-center gap-2.5">
-          <span class="flex h-8 w-8 items-center justify-center bg-secondary-foreground text-secondary">
+          <span class="flex h-8 w-8 items-center justify-center bg-primary text-primary-foreground">
             <PawPrint class="h-4 w-4" />
           </span>
           <span class="font-display text-lg font-bold leading-none">Tiger Maths</span>

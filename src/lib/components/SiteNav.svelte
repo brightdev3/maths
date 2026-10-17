@@ -16,7 +16,7 @@
   <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
     <a href="/" class="group flex items-center gap-2.5">
       <span
-        class="flex h-9 w-9 items-center justify-center bg-foreground text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
+        class="flex h-9 w-9 items-center justify-center bg-primary text-primary-foreground transition-colors group-hover:bg-primary/90"
       >
         <PawPrint class="h-5 w-5" />
       </span>
