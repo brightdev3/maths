@@ -12,7 +12,7 @@
   let mobileOpen = $state(false);
 </script>
 
-<nav class="sticky top-0 z-50 w-full border-b-2 border-foreground/85 bg-background">
+<nav class="sticky top-0 z-50 w-full bg-nav">
   <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
     <a href="/" class="group flex items-center gap-2.5">
       <span
@@ -54,7 +54,7 @@
     </button>
   </div>
   {#if mobileOpen}
-    <div class="border-t border-border bg-background md:hidden">
+    <div class="border-t border-border bg-nav md:hidden">
       <div class="divide-y divide-border px-4 pb-4 pt-1">
         {#each links as link}
           {@const active = page.url.pathname.startsWith(link.url)}

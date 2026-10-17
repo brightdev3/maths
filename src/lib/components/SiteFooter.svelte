@@ -5,7 +5,7 @@
   const buildTime = __BUILD_TIME__;
 </script>
 
-<footer class="border-t-2 border-foreground/85 bg-secondary text-secondary-foreground">
+<footer class="bg-secondary text-secondary-foreground">
   <div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
     <div class="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
       <div class="max-w-md">
