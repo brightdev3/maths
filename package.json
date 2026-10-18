@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "vite build && bun run build:legacy",
+    "build:legacy": "bun run scripts/build-legacy-css.ts",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "prettier --check .",
     "format": "prettier --write .",
-    "server": "vite build && bun server.ts"
+    "server": "bun run build && bun server.ts"
   },
   "devDependencies": {
     "@internationalized/date": "^3.12.3",
@@ -24,6 +25,7 @@
     "@types/express": "^5.0.6",
     "@types/katex": "^0.16.8",
     "autoprefixer": "^10.5.4",
+    "lightningcss": "^1.33.0",
     "mode-watcher": "^1.1.0",
     "postcss": "^8.5.25",
     "prettier": "^3.9.6",

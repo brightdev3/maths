@@ -10,6 +10,7 @@ RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lock
 COPY svelte.config.js vite.config.ts tsconfig.json components.json ./
 COPY src/ src/
 COPY static/ static/
+COPY scripts/ scripts/
 ARG GIT_COMMIT
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     --mount=type=cache,target=/app/node_modules/.vite \
