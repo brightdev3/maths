@@ -14,6 +14,16 @@ Alternatively, you could use the `Dockerfile`/`docker-compose.yml`:
 docker-compose up --build
 ```
 
+## Legacy browser support
+
+Tailwind CSS v4 targets 2023-era browsers, so in addition to the regular Tailwind v4 bundle the site
+ships `legacy.css`, a flattened and downlevelled copy of the stylesheets for older browsers (back to
+~2017). `bun run build` generates it automatically, and `src/app.html` only loads it in browsers that
+cannot use the Tailwind v4 output — modern browsers keep the untouched Tailwind v4 CSS.
+
+See [docs/legacy-browser-support.md](docs/legacy-browser-support.md) for how it works, the support
+matrix and testing instructions.
+
 ## Docker images
 
 Every push to the repository triggers the `.github/workflows/docker-publish.yml`
