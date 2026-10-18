@@ -11,6 +11,31 @@
       rel="stylesheet"
     />
     %sveltekit.head%
+    <!--
+      Fallback stylesheet for browsers that cannot render the Tailwind CSS v4
+      bundle (no cascade layers, oklch() or color-mix()). It is built by
+      `bun run build` and stays inert in modern browsers: the inline script
+      below removes the link before it applies, and the file itself is wrapped
+      in `@supports not (oklch and color-mix)` for when scripting is disabled.
+      See docs/legacy-browser-support.md.
+    -->
+    <link id="legacy-css" rel="stylesheet" href="%sveltekit.assets%/legacy.css" />
+    <script>
+      (function () {
+        var link = document.getElementById("legacy-css");
+        if (!link) return;
+        try {
+          var modern =
+            typeof CSS !== "undefined" &&
+            CSS.supports &&
+            CSS.supports("color", "oklch(0 0 0)") &&
+            CSS.supports("color", "color-mix(in srgb, red, blue)");
+          if (modern) link.parentNode.removeChild(link);
+        } catch (error) {
+          /* keep the fallback stylesheet when detection fails */
+        }
+      })();
+    </script>
   </head>
   <body data-sveltekit-preload-data="hover" class="font-sans antialiased">
     <div style="display: contents">%sveltekit.body%</div>
