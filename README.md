@@ -17,7 +17,7 @@ docker-compose up --build
 ## Legacy browser support
 
 Tailwind CSS v4 targets 2023-era browsers, so in addition to the regular Tailwind v4 bundle the site
-ships `legacy.css`, a flattened and downlevelled copy of the stylesheets for older browsers (back to
+ships `legacy.css`, a stylesheet built with Tailwind CSS v3 from the same theme for older browsers (back to
 ~2017). `bun run build` generates it automatically, and `src/app.html` only loads it in browsers that
 cannot use the Tailwind v4 output — modern browsers keep the untouched Tailwind v4 CSS.
 

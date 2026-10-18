@@ -1,103 +1,79 @@
 # Legacy browser support
 
-The site ships two stylesheets built from the same Tailwind CSS v4 source:
+Modern browsers get the Tailwind CSS v4 bundle, unchanged. Older browsers get `legacy.css`, a stylesheet built with **Tailwind CSS v3** from the same theme and source files, then downleveled with Lightning CSS.
 
-- the regular Vite/Tailwind bundle, and
-- `legacy.css`, a flattened and downlevelled fallback for older browsers.
+## Why
 
-Both are served from every production build; each browser applies exactly one of them.
-Modern browsers keep the untouched Tailwind v4 output.
+Tailwind CSS v4 needs cascade layers, `oklch()`, `color-mix()` and `@property`. The Tailwind docs list Chrome 111, Safari 16.4 and Firefox 128 as the baseline, and recommend staying on v3.4 for older browsers.
 
-## Why this is needed
+- Browsers without cascade layers discard the entire v4 stylesheet, so the page is unstyled.
+- Browsers with layers but without `oklch()` lose the theme colors.
 
-Tailwind CSS v4 is built for the "Baseline 2023" feature set:
-
-- **Cascade layers** (Chrome 99, Safari 15.4, Firefox 97): every Tailwind style lives inside `@layer` blocks.
-  Browsers without layer support discard the whole stylesheet along with the unknown at-rules,
-  which is why old browsers showed the site completely unstyled.
-- **`oklch()`** (Chrome 111, Safari 15.4, Firefox 113): the theme colors are defined in `oklch()`.
-- **`color-mix()`** (Chrome 111, Safari 16.2, Firefox 113): opacity modifiers such as `bg-primary/50`
-  are generated with `color-mix()`.
-
-Tailwind v4.3 already emits its own fallbacks for `color-mix()` (a static color followed by an
-`@supports` upgrade) and for `@property` (initial values applied through the `@layer properties` block),
-but it cannot fall back for `@layer` or `oklch()`. Browsers that lack those features receive declarations
-they drop, so colors and layout collapse. The legacy sheet covers exactly those gaps.
+An earlier approach downleveled the v4 output itself. That still left `:is()`, `:where()` and `var(--x,)` selectors that old browsers drop, and it wrapped the sheet in `@supports`, which excluded browsers without that feature. v3 output avoids all of these: it uses plain selectors, comma `rgba()` colors, `transform`, and no layers.
 
 ## How it works
 
-Build step: `bun run build` runs `vite build` followed by `bun run build:legacy`.
-[`scripts/build-legacy-css.ts`](../scripts/build-legacy-css.ts):
+`bun run build` runs `vite build` and then `scripts/build-legacy-css.ts`.
 
-1. collects every `.css` asset from `build/client` — the Tailwind bundle and all Svelte component styles,
-2. unwraps `@layer` blocks in place (the build emits them in layer order, so hoisting them preserves
-   the cascade the layers expressed),
-3. rewrites `translate` / `rotate` / `scale` onto a single `transform` declaration, because Lightning CSS
-   does not downlevel the individual transform properties that Chrome < 104 / Safari < 14.1 lack,
-4. runs Lightning CSS on each sheet targeting Chrome 62 / Firefox 56 / Safari 11 / Edge 18: colors get
-   hex/rgb fallbacks, `inset`/logical properties/`:where()`/`@media` range syntax are rewritten and vendor
-   prefixes are added,
-5. concatenates the sheets (global Tailwind sheet first), wraps the file in
-   `@supports not ((color: oklch(0 0 0)) and (color: color-mix(in srgb, red, blue))) { ... }` and writes
-   `build/client/legacy.css` together with `.br`/`.gz` copies so adapter-node serves it pre-compressed.
+1. **Theme** (`scripts/legacy/tailwind.config.ts`, `scripts/legacy/theme.ts`). The v4 palette (`node_modules/tailwindcss/theme.css`) and the site's semantic colors (`src/app.css`) are converted from `oklch()` to sRGB. v3 colors are written as `rgba(var(--name-rgb), <alpha-value>)`, so opacity modifiers work. The v4 shadow, blur and radius scales are recreated under their v4 names, spacing covers every integer, and `dark:` matches descendants of `.dark`, as in v4.
+2. **Input** (`scripts/legacy/legacy.css`). `@tailwind base` and `@tailwind utilities`, the base rules and custom utilities from `src/app.css`, the animation classes that `tw-animate-css` provided in v4, and a few rules v3 cannot generate (the `*:[span]:last:*` child variants).
+3. **Theme variables.** The build inserts `:root` and `.dark` blocks generated from `src/app.css`, with hex values and `--*-rgb` triplets. It also adds literal body colors for browsers without custom properties.
+4. **Downleveling.** Lightning CSS targets Chrome 49, Firefox 52, Safari 10 and Edge 15. It converts remaining static color syntax, adds prefixes and expands `inset`.
+5. **Components** (production only). The scoped component stylesheets from the Vite build are downleveled and appended, so component styles apply too.
 
-Loading (`src/app.html`): a `<link id="legacy-css">` is placed after `%sveltekit.head%`, so in the
-browsers that need it the unlayered fallback rules win same-specificity ties against the page/component
-stylesheets. Two independent guards decide whether it applies:
+The output is `build/client/legacy.css`, with `.br` and `.gz` copies that adapter-node serves.
 
-- an inline script removes the link before it applies when the browser reports support for both `oklch()`
-  and `color-mix()` (this also avoids downloading the file on modern browsers), and
-- the `@supports` wrapper keeps the sheet inert when JavaScript is disabled or the script is blocked.
+**Loading** (`src/app.html`). A `<link id="legacy-css">` follows `%sveltekit.head%`, so its unlayered rules win ties in the browsers that use it. An inline script removes the link before it applies when `CSS.supports()` reports both `oklch()` and `color-mix()`, so modern browsers never load it. There is no `@supports` wrapper, so browsers without `@supports` also get the sheet.
+
+**Development.** `vite.config.ts` builds the sheet from source when the dev server starts, and rebuilds it (debounced) when files under `src/` or `scripts/legacy/` change. It serves the result at `/legacy.css`. Dev builds do not include component styles.
 
 ## Support matrix
 
-| Browser                                                    | What it gets                                                   |
-| ---------------------------------------------------------- | -------------------------------------------------------------- |
-| Chrome/Edge 111+, Firefox 113+, Safari 16.2+               | Tailwind v4 bundle (fallback link removed, never downloaded)   |
-| Chrome 99–110, Firefox 97–112, Safari 15.4–16.1            | Legacy sheet (modern bundle lacks `oklch`/`color-mix` support) |
-| Chrome 62–98, Firefox 56–96, Safari 11–15.3, Edge 18+      | Legacy sheet only (modern bundle is discarded entirely)        |
-| Older than the above or no `@supports` support (e.g. IE11) | Unsupported: server-rendered HTML renders without styles       |
+| Browser                                                                      | Stylesheet                                   |
+| ---------------------------------------------------------------------------- | -------------------------------------------- |
+| Chrome/Edge 111+, Firefox 113+, Safari 16.2+                                 | Tailwind v4 (the link is removed)            |
+| Older browsers with custom properties (Chrome 49+, Safari 9.1+, Firefox 31+) | `legacy.css`                                 |
+| Modern browsers with JavaScript disabled                                     | `legacy.css` applies alongside the v4 bundle |
+| Browsers without custom properties                                           | Literal body colors and preflight only       |
 
-CSS compatibility reaches back to 2017-era browsers. JavaScript support is unchanged by this work: the
-app bundle still targets the tooling baseline, so very old browsers may receive a styled but
-non-interactive page, and some modern-only utilities (`aspect-ratio`, `field-sizing`, flex `gap` on
-really old engines) degrade the same way they always did.
+With JavaScript disabled, the unlayered legacy rules take precedence over the v4 layers for the properties they set. In testing, the result matched the v4 layout, and colors differ by at most about 11/255 because of sRGB rounding.
+
+## Known differences
+
+- v3 preflight and v3 utilities are close to v4 but not identical. Shadows, blur and ring defaults are mapped to v4 values.
+- `:has()` variants (for example `has-[>svg]:px-3`) only apply where `:has()` is supported.
+- Component styles appended to the production sheet can still contain `:where()` or `:is()` selectors, which the very oldest browsers drop.
+- The dev server does not include component styles.
 
 ## Testing
 
-- `bun run build` regenerates the artifact; `bun server.ts` serves the production build on port 5185.
-- Sanity checks on the artifact:
-  - `grep -c "@layer" build/client/legacy.css` reports `0`,
-  - no bare `oklch(` outside the banner comment and the `@supports` condition,
-  - the artifact is ~160 kB raw / ~29 kB gzip / ~24 kB brotli.
-- Verified end-to-end (2026-10) with real old browsers against a production build:
-  - Firefox 78.15.0esr (2020) — renders the homepage, 24 Game and Mathex pages fully styled,
-  - Chromium 89.0.4389.0 (2021) — keeps the fallback link, applies it, colors resolve to the
-    downlevelled `rgb()` values,
-  - modern Chromium — removes the link with JavaScript enabled, and keeps the Tailwind v4 `oklch()`
-    colors when JavaScript is disabled.
-- The dev server serves the last generated `/legacy.css` (see the middleware in `vite.config.ts`), so
-  old-browser checks work locally right after a build.
+Verified against a production build (October 2026):
 
-To preview the legacy look in a modern browser, run this in the DevTools console (it deliberately
-bypasses the feature-query wrapper):
+- **Firefox 78.15.0esr** (2020): homepage, `/tools/24-game` and `/mathex` render styled.
+- **Chromium 89.0.4389.0** (2021, before cascade layers and `oklch()`): homepage renders styled, the disclaimer dialog is centered, and colors resolve to the `rgb()` fallbacks.
+- **Modern Chromium**: with JavaScript enabled, the link is removed and the v4 `oklch()` colors are used. With JavaScript disabled, the legacy base applies and the button width matches the JavaScript-enabled render.
+
+Useful checks on the generated file:
+
+```sh
+bun run build:legacy
+grep -c "@layer\|oklch(\|color-mix(" build/client/legacy.css   # only inside comments and @supports blocks
+```
+
+To preview the legacy look in a modern browser, run this in the DevTools console (it bypasses the v4 link removal):
 
 ```js
 document.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
   if (!link.href.includes("legacy.css")) link.remove();
 });
-const css = await (await fetch("/legacy.css")).text();
-const style = document.createElement("style");
-style.textContent = css.replace(/^[\s\S]*?@supports[^{]*\{/, "").replace(/\}\s*$/, "");
-document.head.append(style);
+const link = document.createElement("link");
+link.rel = "stylesheet";
+link.href = "/legacy.css";
+document.head.append(link);
 ```
 
 ## Maintenance
 
-- Generated files live in `build/` and are never committed; CI and the Docker build create them through
-  `bun run build` (the Dockerfile copies `scripts/` into the build stage for this reason).
-- If a future Tailwind release introduces new old-browser-breaking output, extend
-  `scripts/build-legacy-css.ts` (add a PostCSS rewrite) or lower `LEGACY_TARGETS`.
-- Keep the two guards in sync: the `CSS.supports()` check in `src/app.html` and the `@supports`
-  condition wrapping `legacy.css` must test the same features, otherwise some browsers either download
-  an inert stylesheet or keep applying the wrong one.
+- New v4-only utilities in the source need a v3 equivalent: add them to `addUtilities` in `scripts/legacy/tailwind.config.ts`, or write them in `scripts/legacy/legacy.css`. Variant-prefixed classes (`data-[state=open]:animate-in`) only work for utilities added through the plugin or generated by v3.
+- Keep `scripts/legacy/legacy.css` free of `@layer`, `oklch()`, `color-mix()` and `:is()`/`:where()`, so that it stays valid in old browsers.
+- The Tailwind v3 package is installed as `tailwindcss-v3` (an npm alias of `tailwindcss@^3.4`), so it does not conflict with the v4 `tailwindcss` used by the app.
