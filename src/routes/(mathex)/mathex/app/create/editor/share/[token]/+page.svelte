@@ -80,7 +80,7 @@
 
 <div class="mathex-shell min-h-screen px-4 py-10 sm:px-6">
   <main class="mx-auto max-w-2xl">
-    <section class="mathex-panel rounded-3xl p-6 sm:p-9">
+    <section class="mathex-panel p-6 sm:p-9">
       {#if status === "loading"}
         <LoaderCircle class="h-9 w-9 animate-spin text-primary" />
         <Header size="h1" class="mt-5 text-3xl">Loading shared set...</Header>
@@ -89,7 +89,7 @@
         <Header size="h1" class="mt-5 text-3xl">Share unavailable</Header>
         <p class="mt-3 text-muted-foreground">{error}</p>
       {:else if status === "conflict"}
-        <AlertTriangle class="h-10 w-10 text-amber-600 dark:text-amber-400" />
+        <AlertTriangle class="h-10 w-10 text-primary" />
         <p class="mathex-kicker mt-5">Local draft conflict</p>
         <Header size="h1" class="mt-1 text-3xl">Your current set is different.</Header>
         <p class="mt-3 leading-6 text-muted-foreground">
@@ -100,7 +100,7 @@
           <p class="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Conflicts found</p>
           <ul class="space-y-1.5 text-sm">
             {#each differences as difference}<li class="flex gap-2">
-                <span class="text-amber-600">•</span>{difference}
+                <span class="text-primary">•</span>{difference}
               </li>{/each}
           </ul>
         </div>
@@ -110,7 +110,7 @@
           <Button variant="outline" href="/mathex/app/create/editor">Cancel and keep local</Button>
         </div>
       {:else}
-        <CheckCircle2 class="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+        <CheckCircle2 class="h-10 w-10 text-secondary" />
         <p class="mathex-kicker mt-5">{status === "same" ? "Already saved" : "Saved locally"}</p>
         <Header size="h1" class="mt-1 text-3xl">{share?.set.name || "Shared Mathex set"}</Header>
         <p class="mt-3 text-muted-foreground">

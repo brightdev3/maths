@@ -107,13 +107,13 @@
   {#if !authenticated}
     <main class="mx-auto grid min-h-[80vh] max-w-md place-items-center">
       <form
-        class="mathex-panel w-full rounded-3xl p-6 sm:p-8"
+        class="mathex-panel w-full p-6 sm:p-8"
         onsubmit={(event) => {
           event.preventDefault();
           unlock();
         }}
       >
-        <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary"
+        <span class="flex h-12 w-12 items-center justify-center bg-primary/10 text-primary"
           ><ShieldCheck class="h-6 w-6" /></span
         >
         <p class="mathex-kicker mt-6">Marker access</p>
@@ -162,7 +162,7 @@
 
       {#if focusedTeam}
         <section class="mt-4 grid gap-4 lg:grid-cols-[1fr_0.55fr]">
-          <div class="mathex-panel rounded-3xl p-6 sm:p-9">
+          <div class="mathex-panel p-6 sm:p-9">
             <button
               type="button"
               class="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -174,7 +174,7 @@
               </p>
               <h2 class="mt-2 text-3xl font-black sm:text-5xl">{focusedTeam.name}</h2>
               {#if focusedTeam.currentQuestion > snapshot.questionCount}
-                <p class="mt-10 text-2xl font-bold text-emerald-600 dark:text-emerald-400">All questions complete</p>
+                <p class="mt-10 text-2xl font-bold text-secondary">All questions complete</p>
               {:else}
                 <div class="mt-9">
                   <p class="mathex-kicker">Next question</p>
@@ -187,7 +187,7 @@
             </div>
             <div class="mt-10 grid grid-cols-3 gap-2 sm:gap-4">
               <Button
-                class="h-16 gap-1 bg-emerald-600 text-base hover:bg-emerald-700 sm:h-20 sm:text-lg"
+                class="h-16 gap-1 bg-secondary hover:bg-secondary/90 text-base sm:h-20 sm:text-lg"
                 onclick={() => mark(focusedTeam.id, "correct")}
                 disabled={!connected ||
                   busyTeams.has(focusedTeam.id) ||
@@ -204,7 +204,7 @@
                   focusedTeam.currentQuestion > snapshot.questionCount}><X class="h-5 w-5" /> Wrong</Button
               >
               <Button
-                class="h-16 gap-1 bg-amber-500 text-base text-amber-950 hover:bg-amber-400 sm:h-20 sm:text-lg"
+                class="h-16 gap-1 bg-primary text-base text-primary-foreground hover:bg-primary/90 sm:h-20 sm:text-lg"
                 onclick={() => mark(focusedTeam.id, "skip")}
                 disabled={!connected ||
                   busyTeams.has(focusedTeam.id) ||
@@ -213,19 +213,19 @@
               >
             </div>
           </div>
-          <aside class="mathex-panel rounded-3xl p-5 sm:p-7">
+          <aside class="mathex-panel p-5 sm:p-7">
             <p class="mathex-kicker">Team record</p>
             <div class="mt-5 grid grid-cols-3 gap-2 text-center">
-              <div class="rounded-xl bg-emerald-500/10 p-3">
-                <p class="text-2xl font-black text-emerald-600 dark:text-emerald-400">{focusedTeam.correct}</p>
+              <div class="rounded-xl bg-secondary/10 p-3">
+                <p class="text-2xl font-black text-secondary">{focusedTeam.correct}</p>
                 <p class="text-xs text-muted-foreground">Correct</p>
               </div>
               <div class="rounded-xl bg-red-500/10 p-3">
                 <p class="text-2xl font-black text-red-600 dark:text-red-400">{focusedTeam.incorrect}</p>
                 <p class="text-xs text-muted-foreground">Wrong</p>
               </div>
-              <div class="rounded-xl bg-amber-500/10 p-3">
-                <p class="text-2xl font-black text-amber-600 dark:text-amber-400">{focusedTeam.skipped}</p>
+              <div class="rounded-xl bg-primary/10 p-3">
+                <p class="text-2xl font-black text-primary">{focusedTeam.skipped}</p>
                 <p class="text-xs text-muted-foreground">Skipped</p>
               </div>
             </div>
@@ -235,9 +235,9 @@
                   title="Question {question.questionNumber}{question.incorrect ? `, ${question.incorrect} wrong` : ''}"
                   class="flex h-8 min-w-8 items-center justify-center rounded-md border px-1 text-xs font-bold {question.outcome ===
                   'correct'
-                    ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                    ? 'border-secondary/40 bg-secondary/10 text-secondary'
                     : question.outcome === 'skipped'
-                      ? 'border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                      ? 'border-primary/40 bg-primary/10 text-primary'
                       : question.questionNumber === focusedTeam.currentQuestion
                         ? 'border-primary bg-primary/10 text-primary'
                         : 'border-border text-muted-foreground'}">{question.questionNumber}</span
@@ -257,7 +257,7 @@
         </section>
       {:else}
         <section class="mt-4">
-          <div class="mathex-panel flex flex-col justify-between gap-4 rounded-2xl p-4 sm:flex-row sm:items-center">
+          <div class="mathex-panel flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center">
             <div>
               <p class="font-bold">All teams</p>
               <p class="text-sm text-muted-foreground">Tap a team for a focused marking view, or mark directly here.</p>
@@ -274,7 +274,7 @@
           </div>
           <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {#each visibleTeams as team}
-              <article class="mathex-panel rounded-2xl p-4">
+              <article class="mathex-panel p-4">
                 <button
                   type="button"
                   class="flex w-full items-center justify-between gap-3 text-left"
@@ -299,9 +299,9 @@
                         : ''}"
                       class="flex h-6 min-w-6 items-center justify-center rounded border px-0.5 text-[10px] font-bold {question.outcome ===
                       'correct'
-                        ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        ? 'border-secondary/40 bg-secondary/10 text-secondary'
                         : question.outcome === 'skipped'
-                          ? 'border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                          ? 'border-primary/40 bg-primary/10 text-primary'
                           : question.questionNumber === team.currentQuestion
                             ? 'border-primary bg-primary/10 text-primary'
                             : 'border-border text-muted-foreground/70'}">{question.questionNumber}</span
@@ -311,7 +311,7 @@
                 <div class="mt-4 grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5 border-t border-border/70 pt-3">
                   <Button
                     size="sm"
-                    class="bg-emerald-600 px-2 hover:bg-emerald-700"
+                    class="bg-secondary hover:bg-secondary/90 px-2"
                     aria-label="Mark {team.name} correct"
                     onclick={() => mark(team.id, "correct")}
                     disabled={!connected ||
@@ -334,7 +334,7 @@
                   >
                   <Button
                     size="sm"
-                    class="bg-amber-500 px-2 text-amber-950 hover:bg-amber-400"
+                    class="bg-primary px-2 text-primary-foreground hover:bg-primary/90"
                     aria-label="Skip for {team.name}"
                     onclick={() => mark(team.id, "skip")}
                     disabled={!connected ||
@@ -355,9 +355,9 @@
                   >
                 </div>
                 <div class="mt-3 flex gap-3 text-xs font-semibold">
-                  <span class="text-emerald-600 dark:text-emerald-400">{team.correct} correct</span><span
-                    class="text-red-600 dark:text-red-400">{team.incorrect} wrong</span
-                  ><span class="text-amber-600 dark:text-amber-400">{team.skipped} skipped</span>
+                  <span class="text-secondary">{team.correct} correct</span><span class="text-red-600 dark:text-red-400"
+                    >{team.incorrect} wrong</span
+                  ><span class="text-primary">{team.skipped} skipped</span>
                 </div>
               </article>
             {/each}

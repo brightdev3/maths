@@ -1,9 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Header } from "$lib/components/ui/header";
   import * as InputOTP from "$lib/components/ui/input-otp";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import KeyRound from "@lucide/svelte/icons/key-round";
   import UsersRound from "@lucide/svelte/icons/users-round";
   import { toast } from "svelte-sonner";
   import { REGEXP_ONLY_DIGITS } from "bits-ui";
@@ -40,31 +38,34 @@
   }
 </script>
 
-<div class="mathex-shell relative flex min-h-full items-center justify-center overflow-hidden p-4">
-  <main class="relative w-full max-w-lg">
+<div class="mathex-shell min-h-full px-4 py-10 sm:px-6 sm:py-14">
+  <main class="mx-auto w-full max-w-2xl">
     <a
       href="/mathex/app"
-      class="mb-10 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-      ><ArrowLeft class="h-4 w-4" /> Competition home</a
+      class="inline-flex items-center gap-1.5 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-primary"
+      ><ArrowLeft class="h-3.5 w-3.5" /> Competition home</a
     >
-    <div class="mathex-panel rounded-3xl p-6 sm:p-9">
-      <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-        <KeyRound class="h-6 w-6" />
-      </div>
-      <p class="mathex-kicker mt-7">Player check-in</p>
-      <Header size="h1" class="mt-2 text-4xl tracking-[-0.04em]">Enter the room.</Header>
-      <p class="mt-3 leading-7 text-muted-foreground">
-        Your host has a 6-digit access code. Enter it below to join the competition lobby.
+
+    <header class="mt-8 border-b border-border pb-6">
+      <p class="mathex-kicker">Player check-in</p>
+      <h1 class="mt-3 font-display text-4xl font-bold leading-tight sm:text-5xl">
+        Enter the room<span class="text-primary">.</span>
+      </h1>
+      <p class="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
+        Your host has a six-digit access code. Type it below to join the competition lobby.
       </p>
-      <div class="mt-8 rounded-2xl border border-border/70 bg-background/55 p-4 sm:p-5">
-        <p class="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Room code</p>
+    </header>
+
+    <div class="mt-8">
+      <p class="mathex-kicker">Room code</p>
+      <div class="mt-3 border border-border bg-card p-5">
         <InputOTP.Root maxlength={6} spellcheck="false" pattern={REGEXP_ONLY_DIGITS} bind:value={() => code, setCode}>
           {#snippet children({ cells })}
             <div class="flex w-full justify-between gap-1.5 sm:gap-2">
               {#each cells as cell (cell)}
-                <InputOTP.Group>
+                <InputOTP.Group class="min-w-0 flex-1">
                   <InputOTP.Slot
-                    class="h-11 w-8 border-border bg-muted/60 text-base font-bold text-foreground sm:h-14 sm:w-11 sm:text-xl"
+                    class="h-12 w-full border-border bg-muted/50 text-base font-bold text-foreground sm:h-14"
                     {cell}
                   />
                 </InputOTP.Group>
@@ -73,7 +74,7 @@
           {/snippet}
         </InputOTP.Root>
       </div>
-      <div class="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+      <div class="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
         <UsersRound class="h-4 w-4 text-primary" /> You will choose a display name next.
       </div>
     </div>

@@ -246,13 +246,12 @@
       </section>
 
       <div class="space-y-4">
-        <div class="mathex-panel rounded-3xl p-5 sm:p-7">
+        <div class="mathex-panel p-5 sm:p-7">
           <div class="mb-6 flex items-center justify-between">
             <div>
               <p class="mathex-kicker">Room details</p>
               <h2 class="mt-1 text-xl font-bold">Create a new competition</h2>
             </div>
-            <span class="rounded-xl bg-primary/10 p-2.5 text-primary"><FileJson class="h-5 w-5" /></span>
           </div>
           <form
             class="space-y-4"
@@ -278,7 +277,7 @@
                 </button>
               {/if}
               <button
-                class="flex w-full flex-col items-center gap-2 rounded-2xl border-2 border-dashed p-6 text-center transition-colors {dragOver
+                class="flex w-full flex-col items-center gap-2 border-2 border-dashed p-6 text-center transition-colors {dragOver
                   ? 'border-primary bg-primary/5'
                   : 'border-border hover:border-primary/50'} {file && !fileValid ? 'border-destructive' : ''} {file &&
                 !useEditorSet
@@ -300,7 +299,7 @@
                   <FileJson class="h-8 w-8 text-primary" />
                   <span class="text-sm font-medium">{file.name}</span>
                   {#if fileValid}
-                    <span class="text-xs text-emerald-600 dark:text-emerald-400">
+                    <span class="text-xs text-secondary">
                       {questionCount} question{questionCount === 1 ? "" : "s"}
                     </span>
                   {:else}
@@ -347,7 +346,7 @@
                 </p>
               </div>
 
-              <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+              <div class="border border-border/70 bg-muted/30 p-3.5">
                 <div class="flex items-start gap-2.5">
                   <Checkbox id="visibility-tracking" bind:checked={visibilityTracking} />
                   <div>
@@ -362,7 +361,7 @@
               </div>
             </div>
 
-            <div class="rounded-2xl border border-border/70">
+            <div class="border border-border/70">
               <button
                 type="button"
                 class="flex w-full items-center justify-between p-3.5 text-left"
@@ -396,7 +395,7 @@
                         Ends the game for everyone. 0 means no timer.
                       </p>
                     </div>
-                    <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                    <div class="border border-border/70 bg-muted/30 p-3.5">
                       <div class="flex items-start gap-2.5">
                         <Checkbox id="end-on-perfect" bind:checked={endOnPerfectScore} />
                         <div>
@@ -415,7 +414,7 @@
                   <div>
                     <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Access</p>
                     <div class="mt-2 grid gap-3 sm:grid-cols-2">
-                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
                           <Checkbox id="allow-late-join" bind:checked={allowLateJoin} />
                           <div>
@@ -433,7 +432,7 @@
                   <div>
                     <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Player tools</p>
                     <div class="mt-2 grid gap-3 sm:grid-cols-2">
-                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
                           <Checkbox id="allow-leaderboard" bind:checked={allowShowLeaderboard} />
                           <div>
@@ -446,7 +445,7 @@
                           </div>
                         </div>
                       </div>
-                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
                           <Checkbox id="allow-calculator" bind:checked={allowCalculator} />
                           <div>
@@ -458,7 +457,7 @@
                           </div>
                         </div>
                       </div>
-                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
                           {#key chatKey}
                             <Checkbox
@@ -475,7 +474,7 @@
                           </div>
                         </div>
                       </div>
-                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
                           <Checkbox id="allow-sketch" bind:checked={allowSketch} />
                           <div>
@@ -499,7 +498,7 @@
         </div>
 
         <div
-          class="flex flex-col justify-between gap-3 rounded-2xl border border-border/70 bg-muted/30 p-5 sm:flex-row sm:items-center"
+          class="flex flex-col justify-between gap-3 border border-border/70 bg-muted/30 p-5 sm:flex-row sm:items-center"
         >
           <div>
             <p class="text-sm font-semibold">Need a question set?</p>

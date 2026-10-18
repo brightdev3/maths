@@ -33,9 +33,7 @@
     <span>Team name</span><span>Group</span><span></span>
   </div>
   {#each teams as team, index (team.id)}
-    <div
-      class="grid gap-2 rounded-xl border border-border/70 bg-background/55 p-3 sm:grid-cols-[1fr_0.65fr_2rem] sm:items-end sm:gap-3"
-    >
+    <div class="grid gap-2 border border-border bg-card p-3 sm:grid-cols-[1fr_0.65fr_2rem] sm:items-end sm:gap-3">
       <div>
         <Label for="team-{team.id}" class="mb-1.5 sm:sr-only">Team {index + 1} name</Label>
         <div class="flex items-center gap-2">

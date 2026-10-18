@@ -139,8 +139,8 @@
       </div>
       <span
         class="flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold {connected
-          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-          : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'}"
+          ? 'bg-secondary/10 text-secondary'
+          : 'bg-primary/10 text-primary'}"
       >
         <Radio class="h-3.5 w-3.5" />
         {connected ? stateLabel : "RECONNECTING"}
@@ -148,13 +148,13 @@
     </header>
 
     {#if !id || !hostToken}
-      <section class="mathex-panel rounded-3xl p-8 text-center">
+      <section class="mathex-panel p-8 text-center">
         <h2 class="text-xl font-bold">Host link incomplete</h2>
         <p class="mt-2 text-muted-foreground">Open the private host link created with the competition.</p>
       </section>
     {:else if snapshot}
       <section class="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-        <div class="mathex-panel rounded-3xl p-5 sm:p-7">
+        <div class="mathex-panel p-5 sm:p-7">
           <div class="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p class="mathex-kicker">Round control</p>
@@ -190,18 +190,16 @@
             </div>
           </div>
           {#if snapshot.state === "finished"}
-            <div
-              class="mt-5 rounded-2xl bg-emerald-500/10 p-4 text-sm font-semibold text-emerald-700 dark:text-emerald-400"
-            >
+            <div class="mt-5 bg-secondary/10 p-4 text-sm font-semibold text-secondary">
               This competition is finished. The public scoreboard remains available.
             </div>
           {/if}
         </div>
 
-        <div class="mathex-panel rounded-3xl p-5 sm:p-7">
+        <div class="mathex-panel p-5 sm:p-7">
           <p class="mathex-kicker">Open on other screens</p>
           <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-            <div class="rounded-2xl border border-border/70 p-4">
+            <div class="border border-border/70 p-4">
               <Radio class="h-5 w-5 text-primary" />
               <p class="mt-3 font-bold">Scoreboard</p>
               <p class="mt-1 text-xs text-muted-foreground">Safe for the projector</p>
@@ -215,7 +213,7 @@
                 >
               </div>
             </div>
-            <div class="rounded-2xl border border-border/70 p-4">
+            <div class="border border-border/70 p-4">
               <ShieldCheck class="h-5 w-5 text-primary" />
               <p class="mt-3 font-bold">Marker desk</p>
               <p class="mt-1 text-xs text-muted-foreground">Protected by marker PIN</p>
@@ -253,7 +251,7 @@
         </div>
       </section>
 
-      <section class="mathex-panel rounded-3xl p-5 sm:p-7">
+      <section class="mathex-panel p-5 sm:p-7">
         <div class="mb-4 flex items-end justify-between gap-4">
           <div>
             <p class="mathex-kicker">Live standings</p>
@@ -264,7 +262,7 @@
         <div class="grid gap-2 lg:grid-cols-2">
           {#each snapshot.teams as team}
             <div
-              class="grid grid-cols-[2.5rem_1fr_auto] items-center gap-3 rounded-xl border border-border/70 bg-background/55 p-3"
+              class="grid grid-cols-[2.5rem_1fr_auto] items-center gap-3 rounded-none border border-border bg-card p-3"
             >
               <span class="text-center text-xl font-black text-muted-foreground">{team.rank}</span>
               <div class="min-w-0">
@@ -277,7 +275,7 @@
                 </p>
               </div>
               <div class="text-right">
-                <p class="text-xl font-black text-emerald-600 dark:text-emerald-400">{team.correct}</p>
+                <p class="text-xl font-black text-secondary">{team.correct}</p>
                 <p class="text-xs text-muted-foreground">correct · {team.incorrect} wrong</p>
               </div>
             </div>
@@ -285,7 +283,7 @@
         </div>
       </section>
 
-      <section class="mathex-panel rounded-3xl p-5 sm:p-7">
+      <section class="mathex-panel p-5 sm:p-7">
         <div class="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
             <p class="mathex-kicker">Roster</p>
@@ -301,7 +299,7 @@
         <TeamEditor bind:teams disabled={saving || snapshot.state === "finished"} />
       </section>
     {:else}
-      <section class="mathex-panel rounded-3xl p-8 text-center">
+      <section class="mathex-panel p-8 text-center">
         <p class="text-muted-foreground">Loading host controls...</p>
       </section>
     {/if}

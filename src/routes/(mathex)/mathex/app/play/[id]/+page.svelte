@@ -31,7 +31,6 @@
   import Timer from "@lucide/svelte/icons/timer";
   import Hourglass from "@lucide/svelte/icons/hourglass";
   import CircleMinus from "@lucide/svelte/icons/circle-minus";
-  import UserX from "@lucide/svelte/icons/user-x";
   import Trophy from "@lucide/svelte/icons/trophy";
   import CalculatorIcon from "@lucide/svelte/icons/calculator";
   import MessageCircle from "@lucide/svelte/icons/message-circle";
@@ -328,13 +327,11 @@
       : 'border-border/60 bg-muted/30'}"
   >
     <div
-      class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold {entry.rank === 1
-        ? 'bg-yellow-400 text-yellow-900'
+      class="flex h-6 w-6 shrink-0 items-center justify-center font-mono text-xs font-bold {entry.rank === 1
+        ? 'bg-primary text-primary-foreground'
         : entry.rank === 2
-          ? 'bg-gray-300 text-gray-700'
-          : entry.rank === 3
-            ? 'bg-amber-600 text-white'
-            : 'bg-muted text-muted-foreground'}"
+          ? 'bg-accent text-accent-foreground'
+          : 'bg-muted text-muted-foreground'}"
     >
       {entry.rank}
     </div>
@@ -348,73 +345,74 @@
 <div class="mathex-shell min-h-screen p-4 sm:p-6">
   {#if gameState === "connecting"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
-      <span
-        class="mathex-panel flex items-center gap-3 rounded-2xl px-5 py-4 text-lg font-medium text-muted-foreground"
-      >
+      <span class="mathex-panel flex items-center gap-3 px-5 py-4 text-lg font-medium text-muted-foreground">
         <LoaderCircle class="h-5 w-5 animate-spin" />
         Connecting...
       </span>
     </div>
   {:else if gameState === "choose-name"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
-      <div class="mathex-panel w-full max-w-md rounded-3xl p-7 sm:p-9">
+      <div class="mathex-panel w-full max-w-md p-7 sm:p-9">
         <p class="mathex-kicker">Player check-in</p>
-        <Header size="h1" class="mt-2 text-3xl tracking-[-0.04em]">Choose your name.</Header>
+        <Header size="h1" class="mt-2 text-3xl">Choose your name.</Header>
         <p class="mt-2 text-sm leading-6 text-muted-foreground">This is how you will appear on the live leaderboard.</p>
         <form
-          class="flex flex-col items-center"
+          class="mt-7"
           onsubmit={(e) => {
             e.preventDefault();
             joinRoom();
           }}
         >
-          {#if name}
-            <Identicon seed={name} className="w-16 h-16 rounded-lg" />
-          {:else}
-            <div
-              class="flex h-16 w-16 items-center justify-center rounded-lg border-2 border-dashed border-border text-2xl text-muted-foreground"
-            >
-              ?
+          <div class="flex items-end gap-4">
+            {#if name}
+              <Identicon seed={name} className="h-12 w-12 shrink-0 rounded-lg" />
+            {:else}
+              <div
+                class="flex h-12 w-12 shrink-0 items-center justify-center border border-dashed border-border text-xl text-muted-foreground"
+              >
+                ?
+              </div>
+            {/if}
+            <div class="min-w-0 flex-1 space-y-2">
+              <Label for="name" class="text-sm font-medium">Your name</Label>
+              <Input bind:value={name} type="text" placeholder="Enter your name" maxlength={20} />
             </div>
-          {/if}
-          <div class="mt-4 w-full space-y-2">
-            <Label for="name" class="text-sm font-medium">Your name</Label>
-            <Input bind:value={name} type="text" placeholder="Enter your name" maxlength={20} />
           </div>
-          <Button type="submit" class="mt-5 w-full" size="lg">Join competition</Button>
+          <Button type="submit" class="mt-6 w-full" size="lg">Join competition</Button>
         </form>
       </div>
     </div>
   {:else if gameState === "waiting_start"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
-      <span
-        class="mathex-panel flex items-center gap-3 rounded-2xl px-5 py-4 text-lg font-medium text-muted-foreground"
-      >
+      <span class="mathex-panel flex items-center gap-3 px-5 py-4 text-lg font-medium text-muted-foreground">
         <LoaderCircle class="h-5 w-5 animate-spin" />
         Waiting for game to start...
       </span>
     </div>
   {:else if gameState === "started"}
     <div class="mx-auto w-full {sidePanel ? 'max-w-5xl' : 'max-w-3xl'}">
-      <header class="mathex-panel flex items-center justify-between rounded-2xl p-3.5 sm:p-4">
-        <div class="flex items-center gap-3">
-          <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"
-            ><Timer class="h-4 w-4" /></span
-          >
+      <header class="mathex-panel flex flex-wrap items-center justify-between gap-4 px-4 py-3">
+        <div class="flex items-center gap-2.5">
+          <Timer class="h-4 w-4 text-primary" />
           <div>
-            <p class="text-xl font-bold tabular-nums sm:text-2xl">{msToMinutesAndSeconds(timePassed)}</p>
-            <p class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">Elapsed time</p>
+            <p class="font-display text-xl font-bold leading-none tabular-nums sm:text-2xl">
+              {msToMinutesAndSeconds(timePassed)}
+            </p>
+            <p class="mt-1 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Elapsed time
+            </p>
           </div>
         </div>
         {#if endsInMs !== null}
-          <div class="flex items-center gap-3">
-            <span
-              class="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400"
-              ><Hourglass class="h-4 w-4" /></span
-            >
+          <div class="flex items-center gap-2.5">
+            <Hourglass class="h-4 w-4 text-primary" />
             <div>
-              <p class="text-xl font-bold tabular-nums sm:text-2xl">{msToMinutesAndSeconds(endsInMs)}</p>
-              <p class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">Time left</p>
+              <p class="font-display text-xl font-bold leading-none tabular-nums sm:text-2xl">
+                {msToMinutesAndSeconds(endsInMs)}
+              </p>
+              <p class="mt-1 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Time left
+              </p>
             </div>
           </div>
         {/if}
@@ -422,7 +420,7 @@
           <p class="text-sm font-bold">
             Question {currentQuestion.number}<span class="text-muted-foreground"> / {questionCount}</span>
           </p>
-          <div class="mt-2 h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+          <div class="mt-2 ml-auto h-1 w-24 overflow-hidden rounded-full bg-muted">
             <div
               class="h-full rounded-full bg-primary"
               style={`width: ${(currentQuestion.number / questionCount) * 100}%`}
@@ -490,20 +488,16 @@
       <div class="mt-4 grid items-start gap-4 {sidePanel ? 'lg:grid-cols-[minmax(0,1fr)_300px]' : ''}">
         <div class="min-w-0">
           {#if running}
-            <div class="mathex-panel rounded-3xl p-7 text-center sm:p-9">
+            <div class="mathex-panel p-7 text-center sm:p-9">
               {#if answerFeedback === "correct"}
-                <div
-                  class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                >
+                <div class="mx-auto flex h-16 w-16 items-center justify-center bg-secondary/10 text-secondary">
                   <CircleCheckBig class="h-9 w-9" />
                 </div>
-                <p class="mathex-kicker mt-5 text-emerald-600 dark:text-emerald-400">Correct answer</p>
+                <p class="mathex-kicker mt-5 text-secondary">Correct answer</p>
                 <Header size="h3" class="mt-1 text-3xl">Excellent work.</Header>
                 <p class="mt-2 text-sm text-muted-foreground">Loading your next question...</p>
               {:else if answerFeedback === "wrong"}
-                <div
-                  class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"
-                >
+                <div class="mx-auto flex h-16 w-16 items-center justify-center bg-destructive/10 text-destructive">
                   <CircleX class="h-9 w-9" />
                 </div>
                 <p class="mathex-kicker mt-5 text-destructive">Not quite</p>
@@ -519,15 +513,17 @@
               {/if}
             </div>
           {:else}
-            <div class="mathex-panel mt-4 rounded-3xl p-6 sm:p-9">
-              <div class="mb-7 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+            <div class="mathex-panel p-6 sm:p-9">
+              <div
+                class="mb-5 flex items-center gap-2 border-b border-border pb-3 text-xs font-bold uppercase tracking-[0.16em] text-primary"
+              >
                 <Flag class="h-3.5 w-3.5" /> Problem {currentQuestion.number}
               </div>
               <div class="question-content prose prose-stone max-w-none dark:prose-invert">
                 {@html renderMath(currentQuestion.content)}
               </div>
               <form
-                class="mt-6"
+                class="mt-6 border-t border-border pt-6"
                 onsubmit={(e) => {
                   e.preventDefault();
                   submitAnswer();
@@ -579,7 +575,7 @@
           {/if}
         </div>
         {#if sidePanel === "leaderboard" && roomSettings?.showLeaderboard !== false}
-          <div class="mathex-panel rounded-3xl p-5">
+          <div class="mathex-panel p-5">
             <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
               <Trophy class="h-3.5 w-3.5" /> Live standings
             </div>
@@ -606,7 +602,7 @@
             {/if}
           </div>
         {:else if sidePanel === "chat" && roomSettings?.allowChat === true}
-          <div class="mathex-panel flex max-h-[32rem] flex-col rounded-3xl p-5">
+          <div class="mathex-panel flex max-h-[32rem] flex-col p-5">
             <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
               <MessageCircle class="h-3.5 w-3.5" /> Live chat
             </div>
@@ -615,7 +611,7 @@
                 {@const isHostMessage = message.name === "Host"}
                 <div
                   class="max-w-[85%] rounded-xl px-2.5 py-1.5 {isHostMessage
-                    ? 'self-start border border-amber-500/40 bg-amber-500/10'
+                    ? 'self-start border border-primary/40 bg-primary/10'
                     : message.name === name
                       ? 'self-end bg-primary/10'
                       : 'self-start bg-muted/60'}"
@@ -623,11 +619,11 @@
                   {#if message.name !== name || isHostMessage}
                     <p
                       class="flex items-center gap-1.5 text-[0.65rem] font-bold {isHostMessage
-                        ? 'text-amber-600 dark:text-amber-400'
+                        ? 'text-primary'
                         : 'text-muted-foreground'}"
                     >
                       {#if isHostMessage}
-                        <span class="rounded bg-amber-500 px-1 py-px text-[0.6rem] font-black tracking-wider text-white"
+                        <span class="rounded bg-primary px-1 py-px text-[0.6rem] font-black tracking-wider text-white"
                           >HOST</span
                         >
                       {:else}
@@ -663,41 +659,34 @@
     <SketchPad open={sketchOpen && roomSettings?.allowSketch !== false} onclose={() => (sketchOpen = false)} />
   {:else if gameState === "finished"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
-      <div class="mathex-panel w-full max-w-md rounded-3xl p-7 text-center sm:p-9">
-        <div
-          class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-        >
-          <CircleCheckBig class="h-7 w-7" />
-        </div>
-        <p class="mathex-kicker mt-5">Round complete</p>
-        <Header size="h1" class="mt-2 text-4xl tracking-[-0.04em]">You finished!</Header>
+      <div class="mathex-panel w-full max-w-md p-7 sm:p-9">
+        <p class="mathex-kicker">Round complete</p>
+        <Header size="h1" class="mt-2 text-4xl">You finished<span class="text-primary">.</span></Header>
         {#if leaderboard.length > 0}
           {@const myEntry = leaderboard.find((e) => e.name === name)}
           {#if myEntry}
-            <div class="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2">
-              <span class="text-lg font-bold text-primary">#{myEntry.rank}</span>
+            <div class="mt-5 flex items-center gap-3 border border-border bg-muted/40 px-4 py-3">
+              <span class="font-display text-2xl font-bold leading-none text-primary">#{myEntry.rank}</span>
               <span class="text-sm text-muted-foreground">
-                &middot; {myEntry.totalMs !== null ? msToMinutesAndSeconds(myEntry.totalMs) : "DNF"} &middot;
+                {myEntry.totalMs !== null ? msToMinutesAndSeconds(myEntry.totalMs) : "DNF"} &middot;
                 {myEntry.questionsCompleted}/{myEntry.totalQuestions} correct
               </span>
             </div>
           {/if}
-          <div class="mt-4 flex flex-col gap-1.5 text-left">
+          <p class="mathex-kicker mt-6">Final standings</p>
+          <div class="mt-3 flex flex-col gap-1.5 text-left">
             {#each leaderboard as entry}
               <div
-                class="flex items-center gap-2 rounded-lg border border-border/60 p-2 {entry.name === name
-                  ? 'bg-primary/5 border-primary/20'
-                  : 'bg-muted/30'}"
+                class="flex items-center gap-2 border px-2 py-2 {entry.name === name
+                  ? 'border-primary/40 bg-primary/5'
+                  : 'border-border/60 bg-muted/30'}"
               >
                 <div
-                  class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold {entry.rank ===
-                  1
-                    ? 'bg-yellow-400 text-yellow-900'
+                  class="flex h-6 w-6 shrink-0 items-center justify-center font-mono text-xs font-bold {entry.rank === 1
+                    ? 'bg-primary text-primary-foreground'
                     : entry.rank === 2
-                      ? 'bg-gray-300 text-gray-700'
-                      : entry.rank === 3
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-muted text-muted-foreground'}"
+                      ? 'bg-accent text-accent-foreground'
+                      : 'bg-muted text-muted-foreground'}"
                 >
                   {entry.rank}
                 </div>
@@ -711,20 +700,17 @@
             {/each}
           </div>
         {/if}
-        <p class="mt-4 text-muted-foreground">
+        <p class="mt-5 border-t border-border pt-4 text-sm leading-6 text-muted-foreground">
           The host may communicate more information to you via alerts. They will appear at the bottom right.
         </p>
       </div>
     </div>
   {:else if gameState === "kicked"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
-      <div class="mathex-panel w-full max-w-md rounded-3xl p-7 text-center sm:p-9">
-        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
-          <UserX class="h-7 w-7" />
-        </div>
-        <p class="mathex-kicker mt-5 text-destructive">Removed by host</p>
-        <Header size="h1" class="mt-2 text-4xl tracking-[-0.04em]">You were kicked.</Header>
-        <p class="mt-4 text-muted-foreground">
+      <div class="mathex-panel w-full max-w-md p-7 sm:p-9">
+        <p class="mathex-kicker text-destructive">Removed by host</p>
+        <Header size="h1" class="mt-2 text-4xl">You were kicked<span class="text-primary">.</span></Header>
+        <p class="mt-4 text-sm leading-6 text-muted-foreground">
           The host removed you from this competition. You can rejoin with a new name if they allow it.
         </p>
         <Button
