@@ -6,11 +6,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { toast } from "svelte-sonner";
-  import {
-    CHAT_DISCLAIMER,
-    dismissChatDisclaimer,
-    hasDismissedChatDisclaimer
-  } from "$lib/mathex/chat-disclaimer";
+  import { CHAT_DISCLAIMER, dismissChatDisclaimer, hasDismissedChatDisclaimer } from "$lib/mathex/chat-disclaimer";
 
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Clock3 from "@lucide/svelte/icons/clock-3";
@@ -250,13 +246,12 @@
       </section>
 
       <div class="space-y-4">
-        <div class="mathex-panel rounded-3xl p-5 sm:p-7">
+        <div class="mathex-panel p-5 sm:p-7">
           <div class="mb-6 flex items-center justify-between">
             <div>
               <p class="mathex-kicker">Room details</p>
               <h2 class="mt-1 text-xl font-bold">Create a new competition</h2>
             </div>
-            <span class="rounded-xl bg-primary/10 p-2.5 text-primary"><FileJson class="h-5 w-5" /></span>
           </div>
           <form
             class="space-y-4"
@@ -282,7 +277,7 @@
                 </button>
               {/if}
               <button
-                class="flex w-full flex-col items-center gap-2 rounded-2xl border-2 border-dashed p-6 text-center transition-colors {dragOver
+                class="flex w-full flex-col items-center gap-2 border-2 border-dashed p-6 text-center transition-colors {dragOver
                   ? 'border-primary bg-primary/5'
                   : 'border-border hover:border-primary/50'} {file && !fileValid ? 'border-destructive' : ''} {file &&
                 !useEditorSet
@@ -304,7 +299,7 @@
                   <FileJson class="h-8 w-8 text-primary" />
                   <span class="text-sm font-medium">{file.name}</span>
                   {#if fileValid}
-                    <span class="text-xs text-emerald-600 dark:text-emerald-400">
+                    <span class="text-xs text-secondary">
                       {questionCount} question{questionCount === 1 ? "" : "s"}
                     </span>
                   {:else}
@@ -351,7 +346,7 @@
                 </p>
               </div>
 
-              <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+              <div class="border border-border/70 bg-muted/30 p-3.5">
                 <div class="flex items-start gap-2.5">
                   <Checkbox id="visibility-tracking" bind:checked={visibilityTracking} />
                   <div>
@@ -366,7 +361,7 @@
               </div>
             </div>
 
-            <div class="rounded-2xl border border-border/70">
+            <div class="border border-border/70">
               <button
                 type="button"
                 class="flex w-full items-center justify-between p-3.5 text-left"
@@ -400,7 +395,7 @@
                         Ends the game for everyone. 0 means no timer.
                       </p>
                     </div>
-                    <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                    <div class="border border-border/70 bg-muted/30 p-3.5">
                       <div class="flex items-start gap-2.5">
                         <Checkbox id="end-on-perfect" bind:checked={endOnPerfectScore} />
                         <div>
@@ -419,7 +414,7 @@
                   <div>
                     <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Access</p>
                     <div class="mt-2 grid gap-3 sm:grid-cols-2">
-                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
                           <Checkbox id="allow-late-join" bind:checked={allowLateJoin} />
                           <div>
@@ -437,7 +432,7 @@
                   <div>
                     <p class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Player tools</p>
                     <div class="mt-2 grid gap-3 sm:grid-cols-2">
-                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
                           <Checkbox id="allow-leaderboard" bind:checked={allowShowLeaderboard} />
                           <div>
@@ -450,12 +445,11 @@
                           </div>
                         </div>
                       </div>
-                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
                           <Checkbox id="allow-calculator" bind:checked={allowCalculator} />
                           <div>
-                            <Label for="allow-calculator" class="cursor-pointer text-sm font-semibold"
-                              >Calculator</Label
+                            <Label for="allow-calculator" class="cursor-pointer text-sm font-semibold">Calculator</Label
                             >
                             <p class="mt-1 text-xs leading-5 text-muted-foreground">
                               Floating scientific calculator for players.
@@ -463,7 +457,7 @@
                           </div>
                         </div>
                       </div>
-                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
                           {#key chatKey}
                             <Checkbox
@@ -480,7 +474,7 @@
                           </div>
                         </div>
                       </div>
-                      <div class="rounded-2xl border border-border/70 bg-muted/30 p-3.5">
+                      <div class="border border-border/70 bg-muted/30 p-3.5">
                         <div class="flex items-start gap-2.5">
                           <Checkbox id="allow-sketch" bind:checked={allowSketch} />
                           <div>
@@ -497,14 +491,14 @@
               {/if}
             </div>
 
-            <Button type="submit" class="mt-2 w-full shadow-lg shadow-primary/20" size="lg" disabled={!canCreate}>
+            <Button type="submit" class="mt-2 w-full" size="lg" disabled={!canCreate}>
               {creating ? "Creating…" : "Create Room"}
             </Button>
           </form>
         </div>
 
         <div
-          class="flex flex-col justify-between gap-3 rounded-2xl border border-border/70 bg-muted/30 p-5 sm:flex-row sm:items-center"
+          class="flex flex-col justify-between gap-3 border border-border/70 bg-muted/30 p-5 sm:flex-row sm:items-center"
         >
           <div>
             <p class="text-sm font-semibold">Need a question set?</p>

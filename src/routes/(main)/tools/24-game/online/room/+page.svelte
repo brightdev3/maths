@@ -261,7 +261,7 @@
 <div class="mathex-shell min-h-screen p-4 sm:p-6">
   {#if !inRoom}
     <div class="flex min-h-[calc(100vh-3rem)] items-center justify-center">
-      <div class="mathex-panel w-full max-w-md rounded-3xl p-7 sm:p-9">
+      <div class="mathex-panel w-full max-w-md p-7 sm:p-9">
         <p class="mathex-kicker">Join room</p>
         <Header size="h1" class="mt-2 text-3xl tracking-[-0.04em]">
           {joinError || (connected ? "Enter this room" : "Connecting…")}
@@ -283,7 +283,7 @@
               <Input id="join-password" type="password" maxlength={60} bind:value={password} />
             </div>
           {/if}
-          <Button type="submit" class="w-full shadow-lg shadow-primary/20" size="lg" disabled={!connected}>
+          <Button type="submit" class="w-full" size="lg" disabled={!connected}>
             {needPassword ? "Join with password" : "Join"}
           </Button>
           <Button type="button" variant="ghost" class="w-full" href="/tools/24-game/online">Back to lobby</Button>
@@ -292,13 +292,13 @@
     </div>
   {:else if !snapshot}
     <div class="flex min-h-[calc(100vh-3rem)] items-center justify-center">
-      <span class="mathex-panel flex items-center gap-3 rounded-2xl px-5 py-4 text-lg font-medium text-muted-foreground">
+      <span class="mathex-panel flex items-center gap-3 px-5 py-4 text-lg font-medium text-muted-foreground">
         <LoaderCircle class="h-5 w-5 animate-spin" /> Loading room…
       </span>
     </div>
   {:else if snapshot.state === "lobby"}
     <div class="mx-auto w-full max-w-3xl">
-      <header class="mathex-panel flex items-center justify-between rounded-2xl p-4 sm:p-5">
+      <header class="mathex-panel flex items-center justify-between p-4 sm:p-5">
         <div class="flex items-center gap-3">
           <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             {#if snapshot.format === "1v1"}<Swords class="h-5 w-5" />{:else}<Users class="h-5 w-5" />{/if}
@@ -317,7 +317,7 @@
         </Button>
       </header>
 
-      <section class="mathex-panel mt-4 rounded-3xl p-5">
+      <section class="mathex-panel mt-4 p-5">
         <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
           <Users class="h-3.5 w-3.5" /> Players
         </div>
@@ -328,7 +328,7 @@
                 ? 'border-primary/40 bg-primary/10'
                 : 'border-border/60 bg-muted/30'}"
             >
-              {#if player.isOwner}<Crown class="h-4 w-4 shrink-0 text-yellow-500" />{/if}
+              {#if player.isOwner}<Crown class="h-4 w-4 shrink-0 text-primary" />{/if}
               <span class="truncate text-sm font-medium {player.id === playerId ? 'text-primary' : ''}"
                 >{player.name}{player.id === playerId ? " (you)" : ""}{player.connected ? "" : " (away)"}</span
               >
@@ -356,7 +356,12 @@
                   : "Starting…"}
               </p>
             {:else}
-              <Button class="w-full gap-2" size="lg" onclick={start} disabled={!connected || snapshot.players.length < 2}>
+              <Button
+                class="w-full gap-2"
+                size="lg"
+                onclick={start}
+                disabled={!connected || snapshot.players.length < 2}
+              >
                 <CirclePlay class="h-4 w-4" /> Start game
               </Button>
               <p class="mt-2 text-center text-xs text-muted-foreground">
@@ -372,7 +377,7 @@
       </section>
 
       {#if isOwner}
-        <section class="mathex-panel mt-4 rounded-3xl p-5 sm:p-6">
+        <section class="mathex-panel mt-4 p-5 sm:p-6">
           <p class="mathex-kicker">Room settings</p>
           <div class="mt-4 grid gap-3 sm:grid-cols-2">
             <div class="grid gap-1.5">
@@ -444,7 +449,7 @@
     </div>
   {:else}
     <div class="mx-auto w-full max-w-3xl">
-      <header class="mathex-panel flex items-center justify-between rounded-2xl p-3.5 sm:p-4">
+      <header class="mathex-panel flex items-center justify-between p-3.5 sm:p-4">
         <div class="flex items-center gap-3">
           <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
             {#if snapshot.mode === "hit"}<Zap class="h-4 w-4" />{:else}<Timer class="h-4 w-4" />{/if}
@@ -487,7 +492,12 @@
                   : "Next round"
                 : "Skip to next round"}
             </Button>
-            <Button variant="destructive" class="gap-2" onclick={() => (confirmFinishOpen = true)} disabled={!connected}>
+            <Button
+              variant="destructive"
+              class="gap-2"
+              onclick={() => (confirmFinishOpen = true)}
+              disabled={!connected}
+            >
               <Flag class="h-4 w-4" /> End game
             </Button>
           </div>
@@ -497,18 +507,20 @@
           <div class="flex items-center gap-3 text-sm">
             <span class="font-semibold">{myPlayer?.name ?? name}</span>
             {#if snapshot.mode === "hit"}
-              <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary"
+              <span
+                class="rounded-[2px] bg-primary/10 px-2 py-1 font-mono text-[0.62rem] font-bold uppercase tracking-[0.1em] text-primary"
                 >{myPlayer?.score ?? 0} won</span
               >
             {:else if myPlayer}
-              <span class="rounded-full bg-muted px-2.5 py-1 text-xs font-bold text-muted-foreground"
+              <span
+                class="rounded-[2px] bg-muted px-2 py-1 font-mono text-[0.62rem] font-bold uppercase tracking-[0.1em] text-muted-foreground"
                 >{formatMs(myPlayer.totalTimeMs)}</span
               >
             {/if}
           </div>
           {#if snapshot.mode === "hit" && myPlayer}
             {#if myPlayer.solvedThisRound}
-              <span class="flex items-center gap-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+              <span class="flex items-center gap-1.5 text-sm font-semibold text-secondary">
                 <CircleCheckBig class="h-4 w-4" /> You won this round
               </span>
             {:else if myPlayer.lockedThisRound}
@@ -518,7 +530,7 @@
             {:else if snapshot.hit?.playerId === playerId}
               <span class="text-sm font-semibold text-primary">Quick — show your solution!</span>
             {:else}
-              <Button size="lg" class="gap-2 shadow-lg shadow-primary/20" onclick={hit} disabled={!!snapshot.hit}>
+              <Button size="lg" class="gap-2" onclick={hit} disabled={!!snapshot.hit}>
                 <Zap class="h-4 w-4" /> Hit!
               </Button>
             {/if}
@@ -526,7 +538,7 @@
         </div>
 
         {#if snapshot.puzzle}
-          <div class="mathex-panel mt-4 rounded-3xl p-5 sm:p-7">
+          <div class="mathex-panel mt-4 p-5 sm:p-7">
             {#if snapshot.roundComplete}
               <p class="text-center text-sm font-semibold text-muted-foreground">
                 {#if nextRoundInMs !== null}
@@ -537,8 +549,7 @@
               </p>
             {:else if snapshot.mode === "hit" && snapshot.hit && snapshot.hit.playerId !== playerId}
               <p class="text-center text-sm font-semibold text-muted-foreground">
-                {snapshot.players.find((player) => player.id === snapshot?.hit?.playerId)?.name ?? "Someone"} has the
-                floor…
+                {snapshot.players.find((player) => player.id === snapshot?.hit?.playerId)?.name ?? "Someone"} has the floor…
               </p>
             {/if}
             <div class="mt-2">
@@ -553,17 +564,17 @@
           </div>
         {/if}
       {:else if snapshot.state === "finished"}
-        <section class="mathex-panel mt-4 rounded-3xl p-6 text-center sm:p-9">
-          <div
-            class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-          >
+        <section class="mathex-panel mt-4 p-6 text-center sm:p-9">
+          <div class="mx-auto flex h-14 w-14 items-center justify-center bg-secondary/10 text-secondary">
             <Trophy class="h-7 w-7" />
           </div>
           <p class="mathex-kicker mt-4">Final result</p>
           <Header size="h2" class="mt-1 text-3xl">{snapshot.players[0]?.name ?? "Nobody"} wins!</Header>
           {#if isOwner}
             <div class="mt-6 flex flex-wrap justify-center gap-2">
-              <Button class="gap-2" onclick={restart} disabled={!connected}><CirclePlay class="h-4 w-4" /> Play again</Button>
+              <Button class="gap-2" onclick={restart} disabled={!connected}
+                ><CirclePlay class="h-4 w-4" /> Play again</Button
+              >
               <Button variant="outline" class="gap-2" onclick={leave}><LogOut class="h-4 w-4" /> Leave</Button>
             </div>
           {:else}
@@ -575,9 +586,10 @@
         </section>
       {/if}
 
-      <section class="mathex-panel mt-4 rounded-3xl p-5">
+      <section class="mathex-panel mt-4 p-5">
         <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
-          <Trophy class="h-3.5 w-3.5" /> {snapshot.state === "finished" ? "Final standings" : "Standings"}
+          <Trophy class="h-3.5 w-3.5" />
+          {snapshot.state === "finished" ? "Final standings" : "Standings"}
         </div>
         <div class="mt-3 grid gap-1.5">
           {#each snapshot.players as player, index (player.id)}
@@ -588,7 +600,7 @@
             >
               <div
                 class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold {index === 0
-                  ? 'bg-yellow-400 text-yellow-900'
+                  ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground'}"
               >
                 {index + 1}
@@ -624,8 +636,8 @@
 </div>
 
 {#if confirmFinishOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div class="mathex-panel w-full max-w-sm rounded-3xl p-6">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
+    <div class="mathex-panel w-full max-w-sm p-6">
       <h3 class="text-xl font-bold">End the game?</h3>
       <p class="mt-2 text-sm text-muted-foreground">Everyone will see the final standings.</p>
       <div class="mt-5 flex gap-2">

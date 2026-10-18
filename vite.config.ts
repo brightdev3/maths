@@ -1,8 +1,9 @@
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { type ViteDevServer, defineConfig } from "vite";
-import { createWSServer } from "./src/ws/index.server";
 
 function resolveCommitHash() {
   if (process.env.GIT_COMMIT) return process.env.GIT_COMMIT.slice(0, 7);
@@ -19,8 +20,14 @@ const buildTime = process.env.BUILD_TIME ?? new Date().toISOString();
 
 const webSocketServer = {
   name: "webSocketServer",
-  configureServer(server: ViteDevServer) {
+  async configureServer(server: ViteDevServer) {
     if (!server.httpServer) return;
+    // Loaded lazily at runtime: the realtime server imports `bun:sqlite`,
+    // which Node's default ESM loader (used by svelte-check) cannot resolve.
+    // The URL is computed instead of using a string literal so Vite's config
+    // bundler leaves the import alone and doesn't pull it into the top-level graph.
+    const wsModuleUrl = pathToFileURL(join(process.cwd(), "src/ws/index.server.ts")).href;
+    const { createWSServer } = await import(wsModuleUrl);
     const realtime = createWSServer(server.httpServer);
     server.httpServer.once("close", realtime.flush);
   }

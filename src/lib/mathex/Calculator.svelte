@@ -415,7 +415,7 @@
 </script>
 
 <div
-  class="fixed right-4 bottom-24 z-50 w-72 rounded-2xl border border-border bg-card shadow-2xl"
+  class="fixed right-4 bottom-24 z-50 w-72 border border-border bg-card"
   style={pos ? `left: ${pos.x}px; top: ${pos.y}px; bottom: auto; right: auto;` : ""}
   role="dialog"
   aria-label="Calculator"

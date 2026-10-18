@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Confetti } from "svelte-confetti";
-  import { Calculator, Lightbulb, RefreshCw, RotateCcw, Swords, Trophy } from "@lucide/svelte/icons";
+  import { Lightbulb, RefreshCw, RotateCcw, Swords, Trophy } from "@lucide/svelte/icons";
   import {
     addFractions,
     divideFractions,
@@ -162,17 +162,10 @@
 {/if}
 
 <div class="mathex-shell relative isolate min-h-full overflow-hidden py-8 sm:py-12">
-  <div class="mathex-grid pointer-events-none absolute inset-x-0 top-0 h-[32rem] opacity-65"></div>
-  <div class="pointer-events-none absolute -right-24 top-40 h-72 w-72 rounded-full bg-primary/10 blur-3xl"></div>
-
   <div class="relative mx-auto max-w-3xl px-4 sm:px-6">
     <header class="text-center">
-      <div
-        class="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/75 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-primary backdrop-blur-sm"
-      >
-        <Calculator class="h-3.5 w-3.5" /> Arithmetic puzzle
-      </div>
-      <h1 class="mt-5 text-5xl font-bold tracking-[-0.06em] sm:text-6xl">24 Game<span class="text-primary">.</span></h1>
+      <p class="mathex-kicker">Arithmetic puzzle</p>
+      <h1 class="mt-4 font-display text-5xl font-bold sm:text-6xl">24 Game<span class="text-primary">.</span></h1>
       <p class="mt-3 text-muted-foreground sm:text-lg">
         Combine all four numbers with +, −, × and ÷ to reach exactly 24.
       </p>
@@ -183,7 +176,7 @@
       </div>
     </header>
 
-    <main class="mathex-panel mx-auto mt-8 max-w-xl rounded-3xl p-5 sm:p-8">
+    <main class="mathex-panel mx-auto mt-8 max-w-xl p-5 sm:p-8">
       <div class="flex items-center justify-between">
         <div>
           <p class="mathex-kicker">Rounds solved</p>
@@ -198,7 +191,7 @@
         {#each difficulties as level}
           <button
             onclick={() => chooseDifficulty(level)}
-            class={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition-colors ${difficulty === level ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"}`}
+            class={`rounded-[2px] border px-3 py-1 text-xs font-semibold capitalize transition-colors ${difficulty === level ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"}`}
           >
             {level}
           </button>

@@ -361,11 +361,11 @@
   {#each filteredLogs as log}
     <div
       class="flex gap-2 py-0.5 {log.type === 'correct'
-        ? 'text-emerald-600 dark:text-emerald-400'
+        ? 'text-secondary'
         : log.type === 'wrong'
           ? 'text-red-600 dark:text-red-400'
           : log.type === 'skipped'
-            ? 'text-amber-600 dark:text-amber-400'
+            ? 'text-primary'
             : log.type === 'finished'
               ? 'text-yellow-600 dark:text-yellow-400 font-bold'
               : 'text-muted-foreground'}"
@@ -398,10 +398,7 @@
 {/snippet}
 
 {#snippet settingsPanel(uid: string)}
-  <div
-    class="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-border bg-card p-4 shadow-xl"
-    transition:fade={fadeParams}
-  >
+  <div class="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-border bg-card p-4" transition:fade={fadeParams}>
     <p class="text-sm font-bold">Display settings</p>
     <p class="mt-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">View</p>
     <div
@@ -432,7 +429,7 @@
 {/snippet}
 
 {#snippet alertsPanel()}
-  <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+  <div class="mathex-panel p-5 sm:p-6">
     <button
       type="button"
       onclick={() => togglePanel("alerts")}
@@ -482,7 +479,7 @@
 
 {#snippet leaderboardPanel()}
   {#if currentState === "finished" && leaderboard.length > 0}
-    <div class="mathex-panel rounded-2xl p-5 sm:p-6" transition:slide={slideParams}>
+    <div class="mathex-panel p-5 sm:p-6" transition:slide={slideParams}>
       <div class="flex items-center justify-between gap-2">
         <button
           type="button"
@@ -514,16 +511,13 @@
         <div transition:slide={slideParams}>
           <div class="mt-4 flex max-h-64 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
             {#each leaderboard as entry}
-              <div class="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 p-2.5">
+              <div class="flex items-center gap-3 border border-border/60 bg-muted/30 p-2.5">
                 <div
-                  class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold {entry.rank ===
-                  1
-                    ? 'bg-yellow-400 text-yellow-900'
+                  class="flex h-7 w-7 shrink-0 items-center justify-center font-mono text-xs font-bold {entry.rank === 1
+                    ? 'bg-primary text-primary-foreground'
                     : entry.rank === 2
-                      ? 'bg-gray-300 text-gray-700'
-                      : entry.rank === 3
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-muted text-muted-foreground'}"
+                      ? 'bg-accent text-accent-foreground'
+                      : 'bg-muted text-muted-foreground'}"
                 >
                   {entry.rank}
                 </div>
@@ -532,7 +526,7 @@
                   <span class="truncate text-sm font-medium">{entry.name}</span>
                 </div>
                 {#if entry.visibilityFlags > 0}
-                  <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                  <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
                     <TriangleAlert class="h-3.5 w-3.5" />
                     {entry.visibilityFlags}
                   </span>
@@ -591,7 +585,7 @@
 {/snippet}
 
 {#snippet hostChatPanel(scrollKey: string)}
-  <div class="mathex-panel rounded-2xl p-5 sm:p-6" transition:slide={slideParams}>
+  <div class="mathex-panel p-5 sm:p-6" transition:slide={slideParams}>
     <button
       type="button"
       onclick={() => togglePanel("chat")}
@@ -665,7 +659,7 @@
 {/snippet}
 
 {#snippet gameOptionsPanel(uid: string)}
-  <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+  <div class="mathex-panel p-5 sm:p-6">
     <button
       type="button"
       onclick={() => togglePanel("game")}
@@ -792,7 +786,7 @@
     {@render alertsPanel()}
     {@render gameOptionsPanel(uid)}
     {@render leaderboardPanel()}
-    <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+    <div class="mathex-panel p-5 sm:p-6">
       {@render logsPanel(uid)}
     </div>
     {#if roomSettings?.allowChat === true}
@@ -816,7 +810,7 @@
 {/snippet}
 
 {#snippet playerListPanel(uid: string)}
-  <div class="mathex-panel min-w-0 rounded-2xl p-5 sm:p-6">
+  <div class="mathex-panel min-w-0 p-5 sm:p-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <button
         type="button"
@@ -826,7 +820,7 @@
       >
         <span class="flex min-w-0 items-center gap-3">
           <Header size="h2" class="text-2xl">Players</Header><span
-            class="flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary"
+            class="flex shrink-0 items-center gap-1.5 rounded-[2px] bg-primary/10 px-2 py-1 font-mono text-[0.68rem] font-bold uppercase tracking-[0.1em] text-primary"
             ><UsersRound class="h-3.5 w-3.5" />{players.length} joined</span
           >
         </span>
@@ -860,17 +854,17 @@
               tick >= 0 && player.startingTime ? (player.finishingTime || Date.now()) - player.startingTime : null}
             <div
               animate:flip={flipParams}
-              class="flex items-center gap-3 rounded-lg border-2 border-solid p-3 transition-colors {player.startingTime
+              class="flex items-center gap-3 border border-solid p-3 transition-colors {player.startingTime
                 ? player.finishingTime
-                  ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
-                  : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
+                  ? 'bg-secondary/10 border-secondary/40'
+                  : 'bg-destructive/5 border-destructive/30'
                 : 'bg-muted/50 border-border'}"
             >
               <div
-                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold {player.finishingTime
-                  ? 'bg-emerald-500 text-white'
+                class="flex h-8 w-8 shrink-0 items-center justify-center font-mono text-sm font-bold {player.finishingTime
+                  ? 'bg-secondary text-secondary-foreground'
                   : player.startingTime
-                    ? 'bg-red-500 text-white'
+                    ? 'bg-destructive text-destructive-foreground'
                     : 'bg-muted text-muted-foreground'}"
               >
                 {i + 1}
@@ -893,9 +887,7 @@
                     {/if}
                   {/if}
                   {#if player.visibilityFlags > 0}
-                    <span
-                      class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"
-                    >
+                    <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
                       <TriangleAlert class="h-3.5 w-3.5" />
                       {player.visibilityFlags}
                     </span>
@@ -959,32 +951,30 @@
     </AlertDialog.Content>
   </AlertDialog.Root>
   <main class="mx-auto flex w-full max-w-7xl flex-col gap-4">
-    <header class="flex flex-col justify-between gap-4 py-2 sm:flex-row sm:items-end">
+    <header class="flex flex-col justify-between gap-4 border-b border-border pb-4 pt-2 sm:flex-row sm:items-end">
       <div>
         <p class="mathex-kicker">Host control room</p>
-        <Header size="h1" class="mt-1 text-3xl tracking-[-0.04em]">Competition dashboard</Header>
+        <Header size="h1" class="mt-1 text-3xl">Competition dashboard</Header>
       </div>
       <span
-        class="flex w-fit items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-600 dark:text-amber-400"
+        class="flex w-fit items-center gap-2 rounded-[2px] bg-primary/10 px-2.5 py-1 font-mono text-[0.68rem] font-bold uppercase tracking-[0.14em] text-primary"
         ><Radio class="h-3.5 w-3.5" />
-        {currentState === "lobby" ? "LOBBY OPEN" : currentState === "started" ? "ROUND LIVE" : "ROUND FINISHED"}</span
+        {currentState === "lobby" ? "Lobby open" : currentState === "started" ? "Round live" : "Round finished"}</span
       >
     </header>
-    <div class="mathex-panel rounded-2xl p-5 sm:p-6">
-      <div class="flex flex-col items-center justify-center gap-3 text-center sm:flex-row sm:gap-5">
-        <span class="text-sm text-muted-foreground"
-          >Players join at <span class="font-mono font-medium text-foreground">{page.url.host}/mathex/app/play</span
-          ></span
-        >
-        <button
-          type="button"
-          class="group flex items-center gap-3 rounded-xl bg-primary px-4 py-2.5 text-primary-foreground shadow-lg shadow-primary/20"
-          onclick={copyRoomCode}
-          ><span class="text-2xl font-bold tracking-[0.08em] sm:text-3xl">{roomId}</span><Copy
-            class="h-4 w-4 opacity-75 transition-opacity group-hover:opacity-100"
-          /></button
-        >
-      </div>
+    <div class="mathex-panel flex flex-col items-start justify-between gap-3 p-4 sm:flex-row sm:items-center sm:px-5">
+      <span class="text-sm text-muted-foreground"
+        >Players join at <span class="font-mono font-medium text-foreground">{page.url.host}/mathex/app/play</span
+        ></span
+      >
+      <button
+        type="button"
+        class="group flex items-center gap-3 rounded-[2px] bg-primary px-4 py-2 text-primary-foreground"
+        onclick={copyRoomCode}
+        ><span class="font-mono text-xl font-bold tracking-[0.12em] sm:text-2xl">{roomId}</span><Copy
+          class="h-4 w-4 opacity-75 transition-opacity group-hover:opacity-100"
+        /></button
+      >
     </div>
 
     {#key viewMode}
@@ -1047,7 +1037,7 @@
               : '2xl:grid-cols-[minmax(0,1fr)_0px]'}"
           >
             <div class="flex min-w-0 flex-col gap-4">
-              <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+              <div class="mathex-panel p-5 sm:p-6">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <button
                     type="button"
@@ -1057,7 +1047,7 @@
                   >
                     <span class="flex min-w-0 items-center gap-3">
                       <Header size="h2" class="text-2xl">Players</Header><span
-                        class="flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary"
+                        class="flex shrink-0 items-center gap-1.5 rounded-[2px] bg-primary/10 px-2 py-1 font-mono text-[0.68rem] font-bold uppercase tracking-[0.1em] text-primary"
                         ><UsersRound class="h-3.5 w-3.5" />{players.length} joined</span
                       >
                     </span>
@@ -1101,18 +1091,18 @@
                             : null}
                         <div
                           animate:flip={flipParams}
-                          class="flex flex-col gap-2 rounded-xl border-2 border-solid p-3 transition-colors {player.startingTime
+                          class="flex flex-col gap-2 border border-solid p-3 transition-colors {player.startingTime
                             ? player.finishingTime
-                              ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
-                              : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
+                              ? 'bg-secondary/10 border-secondary/40'
+                              : 'bg-destructive/5 border-destructive/30'
                             : 'bg-muted/50 border-border'}"
                         >
                           <div class="flex items-center gap-2.5">
                             <div
-                              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold {player.finishingTime
-                                ? 'bg-emerald-500 text-white'
+                              class="flex h-8 w-8 shrink-0 items-center justify-center font-mono text-sm font-bold {player.finishingTime
+                                ? 'bg-secondary text-secondary-foreground'
                                 : player.startingTime
-                                  ? 'bg-red-500 text-white'
+                                  ? 'bg-destructive text-destructive-foreground'
                                   : 'bg-muted text-muted-foreground'}"
                             >
                               {i + 1}
@@ -1139,9 +1129,7 @@
                                   {/if}
                                 {/if}
                                 {#if player.visibilityFlags > 0}
-                                  <span
-                                    class="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"
-                                  >
+                                  <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
                                     <TriangleAlert class="h-3.5 w-3.5" />
                                     {player.visibilityFlags}
                                   </span>
@@ -1178,7 +1166,7 @@
               </div>
 
               {#if showExtras && logsOpen}
-                <div class="mathex-panel rounded-2xl p-5 sm:p-6 2xl:hidden" transition:slide={slideParams}>
+                <div class="mathex-panel p-5 sm:p-6 2xl:hidden" transition:slide={slideParams}>
                   <div class="flex items-center justify-end">
                     <Button variant="outline" size="sm" onclick={() => (logsOpen = false)} aria-label="Hide logs">
                       <X class="h-4 w-4" />
@@ -1211,7 +1199,7 @@
               inert={!showExtras}
             >
               <div class="flex w-[360px] flex-col gap-4">
-                <div class="mathex-panel rounded-2xl p-5 sm:p-6">
+                <div class="mathex-panel p-5 sm:p-6">
                   {@render logsPanel("tiles-desktop")}
                 </div>
                 {#if roomSettings?.allowChat === true}
@@ -1235,7 +1223,7 @@
             currentState = "finished";
           }
         }}
-        class="w-full shadow-lg shadow-primary/20 sm:w-auto"
+        class="w-full sm:w-auto"
         size="lg">{currentState === "lobby" ? "Start" : "Finish"} Game</Button
       >
     {/if}

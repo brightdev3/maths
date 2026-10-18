@@ -64,12 +64,11 @@
       <div class="flex items-center gap-5">
         <span
           class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider {connected
-            ? 'text-emerald-600 dark:text-emerald-400'
-            : 'text-amber-600 dark:text-amber-400'}"
-          ><Radio class="h-4 w-4" />{connected ? snapshot?.state || "Live" : "Reconnecting"}</span
+            ? 'text-secondary'
+            : 'text-primary'}"><Radio class="h-4 w-4" />{connected ? snapshot?.state || "Live" : "Reconnecting"}</span
         >
         <div
-          class="flex items-center gap-3 rounded-2xl border px-4 py-2 {remainingMs !== null && remainingMs < 0
+          class="flex items-center gap-3 border px-4 py-2 {remainingMs !== null && remainingMs < 0
             ? 'border-destructive/50 bg-destructive/10 text-destructive'
             : 'border-border bg-muted/50'}"
         >
@@ -92,7 +91,7 @@
             <div class="space-y-2">
               {#each group.teams as team}
                 <article
-                  class="grid grid-cols-[3.25rem_1fr_auto] items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 shadow-sm sm:grid-cols-[4rem_1fr_7rem_8rem_auto] sm:px-5"
+                  class="grid grid-cols-[3.25rem_1fr_auto] items-center gap-3 rounded-none border border-border bg-card px-3 py-3 sm:grid-cols-[4rem_1fr_7rem_8rem_auto] sm:px-5"
                 >
                   <span class="text-center text-2xl font-black tabular-nums text-muted-foreground sm:text-3xl"
                     >{team.rank}</span
@@ -121,7 +120,7 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <span
-                      class="flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-1 text-sm font-bold text-emerald-700 dark:text-emerald-300"
+                      class="flex items-center gap-1 rounded-lg bg-secondary/10 px-2 py-1 text-sm font-bold text-secondary"
                       ><Check class="h-4 w-4" />{team.correct}</span
                     >
                     <span
@@ -129,16 +128,16 @@
                       ><X class="h-4 w-4" />{team.incorrect}</span
                     >
                     <span
-                      class="hidden items-center gap-1 rounded-lg bg-amber-500/10 px-2 py-1 text-sm font-bold text-amber-700 dark:text-amber-300 sm:flex"
+                      class="hidden items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-sm font-bold text-primary sm:flex"
                       ><CircleMinus class="h-4 w-4" />{team.skipped}</span
                     >
                   </div>
                   <div class="col-span-3 flex items-center justify-between border-t border-border pt-2 sm:col-span-5">
                     <span
                       class="text-xs font-bold uppercase tracking-wider {team.lastResult === 'correct'
-                        ? 'text-emerald-700 dark:text-emerald-300'
+                        ? 'text-secondary'
                         : team.lastResult === 'skip'
-                          ? 'text-amber-700 dark:text-amber-300'
+                          ? 'text-primary'
                           : 'text-primary'}"
                     >
                       {team.currentQuestion > snapshot.questionCount
@@ -167,9 +166,9 @@
                           ? `, ${question.incorrect} wrong`
                           : ''}"
                         class="min-w-0 flex-1 {question.outcome === 'correct'
-                          ? 'bg-emerald-500'
+                          ? 'bg-secondary'
                           : question.outcome === 'skipped'
-                            ? 'bg-amber-500'
+                            ? 'bg-primary'
                             : question.questionNumber === team.currentQuestion
                               ? 'bg-primary'
                               : 'bg-muted'}"

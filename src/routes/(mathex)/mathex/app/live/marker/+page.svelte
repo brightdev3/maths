@@ -1,12 +1,11 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { Header } from "$lib/components/ui/header";
   import * as InputOTP from "$lib/components/ui/input-otp";
   import type {
     PhysicalCreateClientToServerEvents,
     PhysicalCreateServerToClientEvents
   } from "$lib/mathex/physical.schemas";
-  import { ArrowLeft, KeyRound, ShieldCheck } from "@lucide/svelte/icons";
+  import { ArrowLeft, KeyRound } from "@lucide/svelte/icons";
   import { REGEXP_ONLY_DIGITS } from "bits-ui";
   import { io, type Socket } from "socket.io-client";
   import { toast } from "svelte-sonner";
@@ -31,33 +30,35 @@
 
 <svelte:head><title>Marker Desk - Mathex Live</title></svelte:head>
 
-<div class="mathex-shell relative flex min-h-full items-center justify-center overflow-hidden p-4">
-  <div class="mathex-grid pointer-events-none absolute inset-0 opacity-70"></div>
-  <main class="relative w-full max-w-lg">
+<div class="mathex-shell min-h-full px-4 py-10 sm:px-6 sm:py-14">
+  <main class="mx-auto w-full max-w-2xl">
     <a
       href="/mathex/app/live"
-      class="mb-10 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+      class="inline-flex items-center gap-1.5 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-primary"
     >
-      <ArrowLeft class="h-4 w-4" /> Live dashboard setup
+      <ArrowLeft class="h-3.5 w-3.5" /> Live dashboard setup
     </a>
-    <section class="mathex-panel rounded-3xl p-6 sm:p-9">
-      <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary"
-        ><ShieldCheck class="h-6 w-6" /></span
-      >
-      <p class="mathex-kicker mt-7">Marker desk</p>
-      <Header size="h1" class="mt-2 text-4xl tracking-[-0.04em]">Enter the room.</Header>
-      <p class="mt-3 leading-7 text-muted-foreground">
-        Enter the six-digit live competition code, then use the marker PIN.
+
+    <header class="mt-8 border-b border-border pb-6">
+      <p class="mathex-kicker">Marker desk</p>
+      <h1 class="mt-3 font-display text-4xl font-bold leading-tight sm:text-5xl">
+        Enter the room<span class="text-primary">.</span>
+      </h1>
+      <p class="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
+        Type the six-digit live competition code, then use the marker PIN.
       </p>
-      <div class="mt-8 rounded-2xl border border-border/70 bg-background/55 p-4 sm:p-5">
-        <p class="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Room code</p>
+    </header>
+
+    <div class="mt-8">
+      <p class="mathex-kicker">Room code</p>
+      <div class="mt-3 border border-border bg-card p-5">
         <InputOTP.Root maxlength={6} spellcheck="false" pattern={REGEXP_ONLY_DIGITS} bind:value={() => code, setCode}>
           {#snippet children({ cells })}
             <div class="flex w-full justify-between gap-1.5 sm:gap-2">
               {#each cells as cell (cell)}
-                <InputOTP.Group
+                <InputOTP.Group class="min-w-0 flex-1"
                   ><InputOTP.Slot
-                    class="h-11 w-8 border-border bg-muted/60 text-base font-bold text-foreground sm:h-14 sm:w-11 sm:text-xl"
+                    class="h-12 w-full border-border bg-muted/50 text-base font-bold text-foreground sm:h-14"
                     {cell}
                   /></InputOTP.Group
                 >
@@ -66,9 +67,9 @@
           {/snippet}
         </InputOTP.Root>
       </div>
-      <div class="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+      <div class="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
         <KeyRound class="h-4 w-4 text-primary" /> The marker PIN is requested on the next screen.
       </div>
-    </section>
+    </div>
   </main>
 </div>

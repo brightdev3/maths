@@ -319,9 +319,7 @@
 
   function eraseAt(p: Point) {
     const radius = eraserRadius();
-    const strokeHits = new Set(
-      strokes.filter((s) => strokeHit(s, p, radius + s.width / 2)).map((s) => s.id)
-    );
+    const strokeHits = new Set(strokes.filter((s) => strokeHit(s, p, radius + s.width / 2)).map((s) => s.id));
     const boxHits = boxes.filter((b) => insideBox(p, b, radius)).map((b) => b.id);
     if (strokeHits.size === 0 && boxHits.length === 0) return;
     strokes = strokes.filter((s) => !strokeHits.has(s.id));
@@ -645,9 +643,7 @@
 </script>
 
 <div
-  class="fixed inset-0 z-50 flex flex-col {open ? '' : 'hidden'} {tool === 'interact'
-    ? 'pointer-events-none'
-    : ''}"
+  class="fixed inset-0 z-50 flex flex-col {open ? '' : 'hidden'} {tool === 'interact' ? 'pointer-events-none' : ''}"
   role="dialog"
   aria-label="Sketch pad"
   aria-hidden={open ? undefined : "true"}
@@ -702,7 +698,9 @@
         maxlength={500}
         aria-label="Textbox content"
         class="absolute block resize-none overflow-hidden rounded-sm bg-card p-0 leading-[1.25] shadow-lg outline outline-2 outline-primary/60 pointer-events-auto"
-        style="left: {ex}px; top: {ey}px; color: {editorBox ? editorBox.color : color}; font: 600 {size}px/1.25 ui-sans-serif, system-ui, sans-serif;"
+        style="left: {ex}px; top: {ey}px; color: {editorBox
+          ? editorBox.color
+          : color}; font: 600 {size}px/1.25 ui-sans-serif, system-ui, sans-serif;"
         onkeydown={(e) => {
           if (e.key === "Escape") {
             cancelText();
@@ -712,7 +710,7 @@
     {/if}
   </div>
   <div
-    class="absolute bottom-4 left-1/2 z-10 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-border bg-card px-2.5 py-1.5 shadow-xl sm:gap-2 pointer-events-auto"
+    class="absolute bottom-4 left-1/2 z-10 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 border border-border bg-card px-2.5 py-1.5 sm:gap-2 pointer-events-auto"
     role="toolbar"
     aria-label="Sketch tools"
     tabindex={-1}
@@ -766,16 +764,14 @@
       ></button>
       {#if colorOpen}
         <div
-          class="absolute bottom-10 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-xl border border-border bg-card p-2 shadow-xl"
+          class="absolute bottom-10 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-xl border border-border bg-card p-2"
           role="group"
           aria-label="Choose pen colour"
         >
           {#each colors as swatch}
             <button
               type="button"
-              class="h-6 w-6 shrink-0 rounded-full border-2 {color === swatch
-                ? 'border-primary'
-                : 'border-border'}"
+              class="h-6 w-6 shrink-0 rounded-full border-2 {color === swatch ? 'border-primary' : 'border-border'}"
               style="background-color: {swatch};"
               aria-label="Pen colour {swatch}"
               aria-pressed={color === swatch}

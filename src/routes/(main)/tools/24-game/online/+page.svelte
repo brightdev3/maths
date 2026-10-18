@@ -15,7 +15,7 @@
     Game24RoomSummary,
     Game24ServerToClientEvents
   } from "$lib/game24/schemas";
-  import { Calculator, Lock, Plus, RefreshCw, Swords, Timer, Users, Zap } from "@lucide/svelte/icons";
+  import { Lock, Plus, RefreshCw, Swords, Timer, Users, Zap } from "@lucide/svelte/icons";
 
   const socket: Socket<Game24ServerToClientEvents, Game24ClientToServerEvents> = io("/game24", {
     forceNew: true,
@@ -174,34 +174,30 @@
 <svelte:head><title>24 Game - Play online</title></svelte:head>
 
 <div class="mathex-shell relative isolate min-h-full overflow-hidden py-8 sm:py-12">
-  <div class="mathex-grid pointer-events-none absolute inset-x-0 top-0 h-[32rem] opacity-65"></div>
-  <div class="pointer-events-none absolute -right-24 top-40 h-72 w-72 rounded-full bg-primary/10 blur-3xl"></div>
-
   <div class="relative mx-auto max-w-6xl px-4 sm:px-6">
-    <header class="text-center">
-      <a
-        href="/tools/24-game"
-        class="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/75 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-primary backdrop-blur-sm"
-      >
-        <Calculator class="h-3.5 w-3.5" /> 24 Game
-      </a>
-      <h1 class="mt-5 text-5xl font-bold tracking-[-0.06em] sm:text-6xl">
-        Live games<span class="text-primary">.</span>
-      </h1>
-      <p class="mt-3 text-muted-foreground sm:text-lg">
-        Challenge someone to a 1v1 or open a room. Jump into any game below, or start your own.
-      </p>
+    <header class="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p class="mathex-kicker">
+          <a href="/tools/24-game" class="underline-offset-4 hover:underline">24 Game</a> · Live
+        </p>
+        <h1 class="mt-3 font-display text-5xl font-bold leading-[1.02] sm:text-6xl">
+          Live games<span class="text-primary">.</span>
+        </h1>
+        <p class="mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
+          Challenge someone to a 1v1 or open a room. Jump into any game below, or start your own.
+        </p>
+      </div>
       <span
-        class="mt-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold {connected
-          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-          : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'}"
+        class="flex w-fit items-center gap-2 rounded-[2px] px-2.5 py-1 font-mono text-[0.68rem] font-bold uppercase tracking-[0.16em] {connected
+          ? 'bg-secondary/10 text-secondary'
+          : 'bg-primary/10 text-primary'}"
       >
         <RefreshCw class="h-3 w-3 {connected ? '' : 'animate-spin'}" />
         {connected ? "Connected" : "Connecting…"}
       </span>
     </header>
 
-    <div class="mt-8 rounded-3xl border border-border/70 bg-card/70 p-4 backdrop-blur-sm sm:p-5">
+    <div class="mt-8 border border-border/70 bg-card p-4 sm:p-5">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div class="w-full sm:max-w-xs">
           <Label for="lobby-name" class="text-sm font-medium">Your name</Label>
@@ -222,15 +218,15 @@
 
     <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section>
-        <div class="flex items-center justify-between">
-          <h2 class="flex items-center gap-2 text-lg font-bold">
+        <div class="flex items-baseline justify-between border-b border-border pb-3">
+          <h2 class="flex items-center gap-2 font-display text-xl font-bold">
             <Swords class="h-5 w-5 text-primary" /> Open games
-            <span class="text-sm font-normal text-muted-foreground">({rooms.length})</span>
           </h2>
+          <span class="mathex-index">{rooms.length} waiting</span>
         </div>
 
         {#if rooms.length === 0}
-          <div class="mathex-panel mt-4 rounded-3xl p-10 text-center">
+          <div class="mathex-panel mt-4 p-10 text-center">
             <Swords class="mx-auto h-8 w-8 text-muted-foreground" />
             <p class="mt-3 font-semibold">No open games right now</p>
             <p class="mt-1 text-sm text-muted-foreground">Create one and it will appear here for everyone.</p>
@@ -238,15 +234,15 @@
         {:else}
           <div class="mt-4 grid gap-3 sm:grid-cols-2">
             {#each rooms as room (room.code)}
-              <article class="mathex-panel flex flex-col rounded-3xl p-5">
+              <article class="mathex-panel flex flex-col p-5">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
-                    <p class="truncate text-lg font-bold">{room.name}</p>
+                    <p class="truncate font-display text-lg font-bold">{room.name}</p>
                     <p class="mt-0.5 truncate text-xs text-muted-foreground">Hosted by {room.ownerName}</p>
                   </div>
                   {#if room.locked}
                     <span
-                      class="flex shrink-0 items-center gap-1 rounded-full bg-amber-500/10 px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400"
+                      class="flex shrink-0 items-center gap-1 rounded-[2px] bg-primary/10 px-2 py-1 font-mono text-[0.62rem] font-bold uppercase tracking-[0.1em] text-primary"
                     >
                       <Lock class="h-3 w-3" /> Locked
                     </span>
@@ -255,25 +251,25 @@
 
                 <div class="mt-3 flex flex-wrap gap-1.5">
                   <span
-                    class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary"
+                    class="inline-flex items-center gap-1 rounded-[2px] bg-primary/10 px-2 py-1 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-primary"
                   >
                     {#if room.format === "1v1"}<Swords class="h-3 w-3" /> 1v1{:else}<Users class="h-3 w-3" /> Room{/if}
                   </span>
                   <span
-                    class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground"
+                    class="inline-flex items-center gap-1 rounded-[2px] bg-muted px-2 py-1 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
                   >
                     {#if room.mode === "hit"}<Zap class="h-3 w-3" /> Hit &amp; solve{:else}<Timer class="h-3 w-3" /> Fastest
                       time{/if}
                   </span>
                   <span
-                    class="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs font-semibold capitalize text-muted-foreground"
+                    class="inline-flex items-center rounded-[2px] bg-muted px-2 py-1 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
                   >
                     {room.difficulty}
                   </span>
                 </div>
 
-                <div class="mt-4 flex items-center justify-between">
-                  <span class="text-sm text-muted-foreground">
+                <div class="mt-4 flex items-center justify-between border-t border-border pt-3">
+                  <span class="font-mono text-xs text-muted-foreground">
                     {room.playerCount}/{room.maxPlayers} players
                   </span>
                   <Button
@@ -292,16 +288,18 @@
       </section>
 
       <aside>
-        <div class="mathex-panel rounded-3xl p-5 lg:sticky lg:top-24">
-          <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+        <div class="mathex-panel p-5 lg:sticky lg:top-24">
+          <div
+            class="flex items-center gap-2 border-b border-border pb-3 font-mono text-[0.68rem] font-bold uppercase tracking-[0.16em] text-primary"
+          >
             <Users class="h-3.5 w-3.5" /> Online
-            <span class="font-normal text-muted-foreground">({online.length})</span>
+            <span class="ml-auto font-normal text-muted-foreground">({online.length})</span>
           </div>
           <div class="mt-3 grid gap-1.5">
             {#each online as user (user.socketId)}
-              <div class="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 p-2">
+              <div class="flex items-center gap-2 border border-border/60 bg-muted/30 px-2 py-1.5">
                 <span
-                  class="h-2 w-2 shrink-0 rounded-full {user.inRoom ? 'bg-amber-500' : 'bg-emerald-500'}"
+                  class="h-2 w-2 shrink-0 rounded-full {user.inRoom ? 'bg-primary' : 'bg-secondary'}"
                   title={user.inRoom ? "In a game" : "In the lobby"}
                 ></span>
                 <span
@@ -312,7 +310,7 @@
                   {user.name ?? "Choosing a name…"}{#if user.playerId && user.playerId === playerId}&nbsp;(you){/if}
                 </span>
                 <span
-                  class="ml-auto shrink-0 text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground"
+                  class="ml-auto shrink-0 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground"
                 >
                   {user.inRoom ? "Playing" : "Lobby"}
                 </span>
@@ -328,8 +326,8 @@
 </div>
 
 {#if showCreate}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div class="mathex-panel flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
+    <div class="mathex-panel flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden">
       <div class="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-6 py-4 sm:px-8">
         <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
           <Plus class="h-3.5 w-3.5" /> Create a game
@@ -361,14 +359,14 @@
               <button
                 type="button"
                 onclick={() => (form.format = "1v1")}
-                class={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${form.format === "1v1" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/50"}`}
+                class={`flex items-center justify-center gap-2 rounded-[2px] border px-3 py-2 text-sm font-semibold transition-colors ${form.format === "1v1" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/50"}`}
               >
                 <Swords class="h-4 w-4" /> 1v1
               </button>
               <button
                 type="button"
                 onclick={() => (form.format = "multi")}
-                class={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${form.format === "multi" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/50"}`}
+                class={`flex items-center justify-center gap-2 rounded-[2px] border px-3 py-2 text-sm font-semibold transition-colors ${form.format === "multi" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/50"}`}
               >
                 <Users class="h-4 w-4" /> Room
               </button>
@@ -381,7 +379,7 @@
               <button
                 type="button"
                 onclick={() => (form.mode = "hit")}
-                class={`rounded-xl border px-3 py-2 text-left transition-colors ${form.mode === "hit" ? "border-primary bg-primary/10" : "border-border bg-background hover:border-primary/50"}`}
+                class={`rounded-[2px] border px-3 py-2 text-left transition-colors ${form.mode === "hit" ? "border-primary bg-primary/10" : "border-border bg-background hover:border-primary/50"}`}
               >
                 <span class="flex items-center gap-2 text-sm font-bold"
                   ><Zap class="h-4 w-4 text-primary" /> Hit &amp; solve</span
@@ -391,7 +389,7 @@
               <button
                 type="button"
                 onclick={() => (form.mode = "time")}
-                class={`rounded-xl border px-3 py-2 text-left transition-colors ${form.mode === "time" ? "border-primary bg-primary/10" : "border-border bg-background hover:border-primary/50"}`}
+                class={`rounded-[2px] border px-3 py-2 text-left transition-colors ${form.mode === "time" ? "border-primary bg-primary/10" : "border-border bg-background hover:border-primary/50"}`}
               >
                 <span class="flex items-center gap-2 text-sm font-bold"
                   ><Timer class="h-4 w-4 text-primary" /> Fastest time</span
@@ -407,7 +405,7 @@
               <select
                 id="create-difficulty"
                 bind:value={form.difficulty}
-                class="h-10 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                class="h-10 rounded-md border border-input bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="easy">Easy</option>
                 <option value="normal">Normal</option>
@@ -431,7 +429,7 @@
           </div>
 
           <div
-            class="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background px-3 py-2.5"
+            class="flex items-center justify-between gap-3 rounded-[2px] border border-border bg-muted/40 px-3 py-2.5"
           >
             <div class="flex items-center gap-2">
               <Checkbox id="create-auto" bind:checked={form.autoAdvance} />
@@ -458,14 +456,14 @@
               <button
                 type="button"
                 onclick={() => (form.visibility = "public")}
-                class={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${form.visibility === "public" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:border-primary/50"}`}
+                class={`rounded-[2px] border px-3 py-2 text-sm font-semibold transition-colors ${form.visibility === "public" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:border-primary/50"}`}
               >
                 Public
               </button>
               <button
                 type="button"
                 onclick={() => (form.visibility = "password")}
-                class={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${form.visibility === "password" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:border-primary/50"}`}
+                class={`flex items-center justify-center gap-1.5 rounded-[2px] border px-3 py-2 text-sm font-semibold transition-colors ${form.visibility === "password" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:border-primary/50"}`}
               >
                 <Lock class="h-3.5 w-3.5" /> Password
               </button>
@@ -481,7 +479,7 @@
             {/if}
           </div>
 
-          <Button type="submit" size="lg" class="w-full shadow-lg shadow-primary/20" disabled={creating || !connected}>
+          <Button type="submit" size="lg" class="w-full" disabled={creating || !connected}>
             {creating ? "Creating…" : "Create & enter"}
           </Button>
         </form>
@@ -491,8 +489,8 @@
 {/if}
 
 {#if passwordFor}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div class="mathex-panel w-full max-w-sm rounded-3xl p-6">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
+    <div class="mathex-panel w-full max-w-sm p-6">
       <p class="mathex-kicker">Password required</p>
       <h3 class="mt-1 text-xl font-bold">{passwordFor.name}</h3>
       <form

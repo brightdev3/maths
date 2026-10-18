@@ -1,41 +1,64 @@
 <script lang="ts">
-  import { Github } from "@lucide/svelte/icons";
+  import { Github, PawPrint } from "@lucide/svelte/icons";
 
   const buildCommit = __BUILD_COMMIT__;
   const buildTime = __BUILD_TIME__;
 </script>
 
-<footer class="border-t border-border bg-muted/40">
-  <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-    <div class="flex flex-col items-center justify-between gap-4 sm:flex-row">
-      <div class="flex flex-col items-center gap-1 sm:items-start">
-        <p class="text-sm font-medium text-foreground">
-          Made with ♥ by <a href="https://qincai.xyz" class="underline-offset-4 hover:underline">Raymont</a> to celebrate
-          Maths Week.
+<footer class="border-t border-border bg-secondary text-secondary-foreground">
+  <div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+    <div class="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
+      <div class="max-w-md">
+        <div class="flex items-center gap-2.5">
+          <span class="flex h-8 w-8 items-center justify-center bg-primary text-primary-foreground">
+            <PawPrint class="h-4 w-4" />
+          </span>
+          <span class="font-display text-lg font-bold leading-none">Tiger Maths</span>
+        </div>
+        <p class="mt-4 text-sm leading-6 text-secondary-foreground/80">
+          Made with ♥ by <a href="https://qincai.xyz" class="font-semibold underline underline-offset-4">Raymont</a> to
+          celebrate Maths Week. Originally built by
+          <a href="https://devarsh.me" class="font-semibold underline underline-offset-4">Devarsh</a>
+          in Room 22 @ BBI, then improved by
+          <a href="https://devenwei.me" class="font-semibold underline underline-offset-4">Deven</a> as Tiger Maths.
         </p>
-        <p class="text-sm text-muted-foreground">
-          Originally made by <a href="https://devarsh.me" class="font-medium underline-offset-4 hover:underline"
-            >Devarsh</a
-          > as a side project in Room 22 @ BBI.
-        </p>
-        <p class="text-sm text-muted-foreground">Rebranded as Tiger Maths, improved by Deven.</p>
       </div>
-      <a
-        href="https://github.com/brightdev3/maths"
-        target="_blank"
-        class="text-muted-foreground transition-colors hover:text-foreground"
-        aria-label="GitHub"
-      >
-        <Github class="h-5 w-5" />
-      </a>
+
+      <div class="flex flex-col gap-4 sm:flex-row sm:gap-16">
+        <div>
+          <p class="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-secondary-foreground/60">
+            Explore
+          </p>
+          <ul class="mt-3 space-y-2 text-sm font-medium">
+            <li><a href="/utilities/number" class="underline-offset-4 hover:underline">Number search</a></li>
+            <li><a href="/tools" class="underline-offset-4 hover:underline">Tools and games</a></li>
+            <li><a href="/mathex" class="underline-offset-4 hover:underline">Mathex</a></li>
+          </ul>
+        </div>
+        <div>
+          <p class="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-secondary-foreground/60">
+            Source
+          </p>
+          <ul class="mt-3 space-y-2 text-sm font-medium">
+            <li>
+              <a
+                href="https://github.com/brightdev3/maths"
+                target="_blank"
+                class="inline-flex items-center gap-1.5 underline-offset-4 hover:underline"
+              >
+                <Github class="h-4 w-4" /> GitHub repository
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
-    <div class="mt-6 border-t border-border/40 pt-6 text-center">
-      <p class="text-xs text-muted-foreground">Built with SvelteKit, Tailwind CSS, and Bun.</p>
-      <p class="mt-2 text-xs text-muted-foreground">
-        <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.7rem] text-foreground/80"
-          >git:{buildCommit} · build:{buildTime}</code
-        >
-      </p>
+
+    <div
+      class="mt-10 flex flex-col items-start justify-between gap-2 border-t border-secondary-foreground/25 pt-5 sm:flex-row sm:items-center"
+    >
+      <p class="text-xs text-secondary-foreground/70">Built with SvelteKit, Tailwind CSS and Bun.</p>
+      <code class="font-mono text-[0.7rem] text-secondary-foreground/70">git:{buildCommit} · build:{buildTime}</code>
     </div>
   </div>
 </footer>

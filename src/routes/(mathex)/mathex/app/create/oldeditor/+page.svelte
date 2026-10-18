@@ -505,11 +505,11 @@
       </Button>
       <details class="relative">
         <summary
-          class="inline-flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm hover:bg-accent"
+          class="inline-flex h-8 cursor-pointer list-none items-center gap-1 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-accent"
         >
           <Download class="h-3.5 w-3.5" /> Export
         </summary>
-        <div class="absolute right-0 z-10 mt-1 w-72 rounded-md border bg-popover p-3 shadow-md">
+        <div class="absolute right-0 z-10 mt-1 w-72 rounded-md border bg-popover p-3">
           <div class="mb-3 grid grid-cols-2 gap-2 border-b pb-3 sm:grid-cols-3">
             <label class="grid min-w-0 gap-1 text-[0.7rem] text-muted-foreground">
               Question text
@@ -617,7 +617,7 @@
     <!-- Main editor area -->
     <div class="min-h-0 flex-1 overflow-auto p-4 lg:p-6">
       <div class="mx-auto max-w-3xl">
-        <div class="mb-6 grid gap-4 rounded-xl border border-border/60 bg-card p-5 shadow-sm">
+        <div class="mb-6 grid gap-4 rounded-xl border border-border/60 bg-card p-5">
           <div class="grid gap-1.5">
             <label class="text-sm font-medium" for="set-name">Set name</label>
             <input
@@ -638,14 +638,14 @@
           <div class="mb-4 flex items-center gap-3">
             <Header size="h2" class="!m-0">Question {currentQuestionIdx + 1}</Header>
           </div>
-          <div class="flex flex-col gap-6 rounded-xl border border-border/60 bg-card p-6 shadow-sm">
+          <div class="flex flex-col gap-6 rounded-xl border border-border/60 bg-card p-6">
             {#key currentQuestionIdx}
               <QuestionEditor question={currentQuestion} />
             {/key}
           </div>
         {:else}
           <div
-            class="flex flex-col items-center justify-center rounded-xl border border-border/60 bg-card p-12 shadow-sm text-center"
+            class="flex flex-col items-center justify-center rounded-xl border border-border/60 bg-card p-12 text-center"
           >
             <div class="mb-6 text-2xl font-semibold text-foreground">Create your first question</div>
             <p class="mb-6 max-w-md text-muted-foreground">

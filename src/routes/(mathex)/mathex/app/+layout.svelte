@@ -14,8 +14,9 @@
 
   let { children }: Props = $props();
 
-  const siteShellRoutes = ["/mathex/app", "/mathex/app/create", "/mathex/app/play", "/mathex/app/live"];
-  const usesSiteShell = $derived(siteShellRoutes.includes(page.url.pathname));
+  const usesSiteShell = $derived(
+    page.url.pathname.startsWith("/mathex/app") && !page.url.pathname.startsWith("/mathex/app/create/editor")
+  );
 </script>
 
 <svelte:head>

@@ -118,8 +118,8 @@
           createCompetition();
         }}
       >
-        <section class="mathex-panel rounded-3xl p-5 sm:p-7">
-          <div>
+        <section class="mathex-panel p-5 sm:p-7">
+          <div class="border-b border-border pb-4">
             <p class="mathex-kicker">Competition details</p>
             <h2 class="mt-1 text-2xl font-bold">The essentials</h2>
           </div>
@@ -162,7 +162,7 @@
               >
             </div>
           </div>
-          <div class="mt-5 rounded-2xl border border-border/70 bg-background/55 p-4">
+          <div class="mt-5 border border-border bg-muted/40 p-4">
             <label class="flex cursor-pointer items-center gap-3 font-semibold">
               <Checkbox bind:checked={timerEnabled} />
               <Clock3 class="h-4 w-4 text-primary" /> Use a competition timer
@@ -180,9 +180,7 @@
               </div>
             {/if}
           </div>
-          <label
-            class="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-border/70 bg-background/55 p-4"
-          >
+          <label class="mt-4 flex cursor-pointer items-start gap-3 border border-border bg-muted/40 p-4">
             <Checkbox bind:checked={autoFinishWhenComplete} />
             <span>
               <span class="block font-semibold">Automatically finish when all teams are done</span>
@@ -193,8 +191,8 @@
           </label>
         </section>
 
-        <section class="mathex-panel rounded-3xl p-5 sm:p-7">
-          <div class="mb-5 flex items-end justify-between gap-4">
+        <section class="mathex-panel p-5 sm:p-7">
+          <div class="mb-5 flex items-end justify-between gap-4 border-b border-border pb-4">
             <div>
               <p class="mathex-kicker">Teams</p>
               <h2 class="mt-1 text-2xl font-bold">Starting roster</h2>
@@ -204,7 +202,7 @@
           <TeamEditor bind:teams disabled={creating} />
         </section>
 
-        <Button type="submit" size="lg" class="h-12 w-full text-base shadow-lg shadow-primary/20" disabled={!canCreate}>
+        <Button type="submit" size="lg" class="h-12 w-full text-base" disabled={!canCreate}>
           {creating ? "Creating dashboard..." : "Create live dashboard"}
         </Button>
       </form>
