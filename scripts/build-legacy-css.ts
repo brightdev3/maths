@@ -5,9 +5,14 @@
  * 1. Tailwind CSS v3 compiles `scripts/legacy/legacy.css`, with the theme
  *    mirrored from `src/app.css` by `scripts/legacy/tailwind.config.ts`. v3
  *    output has no cascade layers, `oklch()`, `color-mix()` or `@property`.
- * 2. Lightning CSS downlevels the result for old browsers (static color
+ * 2. `:where()`/`:is()` wrappers are flattened, because old engines drop any
+ *    rule whose selector contains them.
+ * 3. Margin-based flexbox `gap` fallbacks are generated from the compiled
+ *    utilities and gated behind `html.no-flex-gap` (set by src/app.html) and
+ *    `@supports not (gap: 1px)`.
+ * 4. Lightning CSS downlevels the result for old browsers (static color
  *    syntax, vendor prefixes, `inset`, ...).
- * 3. Production builds also append the scoped component stylesheets that Vite
+ * 5. Production builds also append the scoped component stylesheets that Vite
  *    emitted, downleveled the same way, so component styles still apply.
  *
  * `bun run build:legacy` writes `build/client/legacy.css` (plus `.br`/`.gz`
@@ -184,6 +189,138 @@ function combineTransforms(container: Container) {
   });
 }
 
+/** The contents of the first `:where(...)` / `:is(...)` wrapper, if it is a single compound selector. */
+function simplePseudoArgument(selector: string, prefix: string) {
+  const start = selector.indexOf(prefix);
+  if (start === -1) return undefined;
+
+  let depth = 1;
+  let index = start + prefix.length;
+  let quote = "";
+  while (index < selector.length && depth > 0) {
+    const char = selector[index];
+    if (quote) {
+      if (char === quote) quote = "";
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === "(") {
+      depth += 1;
+    } else if (char === ")") {
+      depth -= 1;
+    }
+    index += 1;
+  }
+  if (depth !== 0) return undefined;
+
+  const argument = selector.slice(start + prefix.length, index - 1);
+  if (argument === "" || /[,>~+ ]/.test(argument)) return undefined;
+  return { start, end: index, argument };
+}
+
+/**
+ * Replaces single-argument `:where(...)` and `:is(...)` wrappers with their
+ * contents. Old engines ignore any rule whose selector contains these
+ * pseudo-classes, which would drop Tailwind v3 preflight rules and the scoped
+ * component styles (`:where(.svelte-...)`) that Svelte emits. Selectors with
+ * several arguments (for example `:where(.dark, .dark *)`) are left alone.
+ */
+function flattenWhere(container: Container) {
+  container.walkRules((rule) => {
+    let selector = rule.selector;
+    for (const prefix of [":where(", ":is("]) {
+      let match = simplePseudoArgument(selector, prefix);
+      while (match) {
+        selector = selector.slice(0, match.start) + match.argument + selector.slice(match.end);
+        match = simplePseudoArgument(selector, prefix);
+      }
+    }
+    rule.selector = selector;
+  });
+}
+
+const GAP_CLASS = /^gap-(\d+(?:\.\d+)?)$/;
+const ROW_DIRECTION = /^[a-z0-9]+:flex-row$/;
+
+/**
+ * Generates margin-based stand-ins for the `gap-*` utilities. Firefox < 63,
+ * Chrome < 84 and Safari < 14.1 ignore `gap` in flex layouts, and the app pairs
+ * flex containers with `gap` everywhere.
+ *
+ * The rules only apply under `html.no-flex-gap`, a class the inline script in
+ * `src/app.html` sets when its flexbox gap probe fails. A second copy under
+ * `@supports not (gap: 1px)` covers engines that do not know `gap` at all when
+ * scripting is disabled. Children that carry their own margins (`ml-auto`,
+ * `mx-*`, ...) are skipped so those keep working.
+ */
+function flexGapFallbacks(css: string): string {
+  const root = postcss.parse(css);
+  const gaps = new Map<string, number>();
+  const rowDirections = new Map<string, string>();
+
+  root.walkRules((rule) => {
+    const selector = rule.selector.trim();
+    if (!/^\.[^ ,>~+]+$/.test(selector)) return;
+    const name = selector.slice(1).replace(/\\/g, "");
+    const gap = name.match(GAP_CLASS);
+    if (gap) {
+      gaps.set(name, Number(gap[1]));
+      return;
+    }
+    if (ROW_DIRECTION.test(name) && rule.parent?.type === "atrule" && rule.parent.name === "media") {
+      rowDirections.set(name, rule.parent.params);
+    }
+  });
+
+  const classSelector = (name: string) => `.${name.replace(/[:.]/g, "\\$&")}`;
+  const spacing = (units: number) => `calc(.25rem*${units})`;
+  const horizontal = `:not([class*="ml-"]):not([class*="mx-"])`;
+  const vertical = `:not([class*="mt-"]):not([class*="my-"])`;
+  const wrapped = `:not([class*="mr-"]):not([class*="mx-"]):not([class*="mb-"]):not([class*="my-"])`;
+
+  /** Margin rules for the gap utilities, scoped to `prefix` (`html` or `html.no-flex-gap`). */
+  const baseRules = (prefix: string) =>
+    [...gaps]
+      .sort((a, b) => a[1] - b[1])
+      .map(([name, units]) => {
+        const gap = classSelector(name);
+        const value = spacing(units);
+        return [
+          `${prefix} .flex${gap}:not(.flex-col):not(.flex-wrap)>*+*${horizontal}{margin-left:${value}}`,
+          `${prefix} .flex-col${gap}:not(.flex-wrap)>*+*${vertical}{margin-top:${value}}`,
+          `${prefix} .flex-wrap${gap}:not(.flex-col)>*${wrapped}{margin-right:${value};margin-bottom:${value}}`,
+          `${prefix} .flex-col.flex-wrap${gap}>*${wrapped}{margin-right:${value};margin-bottom:${value}}`
+        ].join("");
+      })
+      .join("");
+
+  /**
+   * `sm:flex-row` and friends turn a column into a row at a breakpoint, so the
+   * fallback margins have to switch axes inside the same media query.
+   */
+  const directionRules = (prefix: string) =>
+    [...rowDirections]
+      .map(([direction, media]) => {
+        const dir = classSelector(direction);
+        const rules = [...gaps]
+          .map(([name, units]) => {
+            const gap = classSelector(name);
+            const value = spacing(units);
+            return [
+              `${prefix} .flex-col${gap}${dir}>*+*${vertical}{margin-top:0}`,
+              `${prefix} .flex-col${gap}${dir}>*+*${horizontal}{margin-left:${value}}`,
+              `${prefix} .flex-col.flex-wrap${gap}${dir}>*${wrapped}{margin-right:${value};margin-bottom:${value}}`
+            ].join("");
+          })
+          .join("");
+        return `@media ${media}{${rules}}`;
+      })
+      .join("");
+
+  const gated = baseRules("html.no-flex-gap") + directionRules("html.no-flex-gap");
+  const ungated = baseRules("html") + directionRules("html");
+  return `${gated}@supports not (gap:1px){${ungated}}`;
+}
+
 /** Scoped component styles from the production build, downleveled. */
 function componentStylesheets(clientDir: string): string[] {
   const legacyFile = join(clientDir, "legacy.css");
@@ -193,6 +330,7 @@ function componentStylesheets(clientDir: string): string[] {
     .map((file) => {
       const parsed = postcss.parse(readFileSync(file, "utf8"), { from: file });
       unwrapLayers(parsed);
+      flattenWhere(parsed);
       combineTransforms(parsed);
       return downlevel(relative(clientDir, file), parsed.toString());
     });
@@ -203,7 +341,11 @@ function componentStylesheets(clientDir: string): string[] {
  * include the downleveled component styles.
  */
 export async function buildLegacyCss(options: { rootDir: string; clientDir?: string }): Promise<string> {
-  const global = downlevel("legacy.css", await compileTailwindV3(options.rootDir));
+  const compiled = await compileTailwindV3(options.rootDir);
+  const enhanced = postcss.parse(compiled);
+  flattenWhere(enhanced);
+  const css = `${enhanced.toString()}\n${flexGapFallbacks(compiled)}`;
+  const global = downlevel("legacy.css", css);
   const components = options.clientDir ? componentStylesheets(options.clientDir) : [];
   return `${BANNER}\n${[global, ...components].join("\n")}\n`;
 }

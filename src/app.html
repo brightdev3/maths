@@ -21,14 +21,49 @@
     <link id="legacy-css" rel="stylesheet" href="%sveltekit.assets%/legacy.css" />
     <script>
       (function () {
+        var root = document.documentElement;
+
+        // Browsers without flexbox `gap` need the margin fallbacks in
+        // legacy.css, which only apply under this class. The probe reports
+        // true if the two children end up 10px apart.
+        function flexGapSupported() {
+          try {
+            var probe = document.createElement("div");
+            probe.style.cssText = "display:flex;gap:10px;position:absolute;top:-1000px;left:-1000px;visibility:hidden";
+            var first = document.createElement("i");
+            var second = document.createElement("i");
+            first.style.cssText = second.style.cssText = "width:10px;height:10px";
+            probe.appendChild(first);
+            probe.appendChild(second);
+            root.appendChild(probe);
+            var supported = second.getBoundingClientRect().left - first.getBoundingClientRect().right > 9;
+            root.removeChild(probe);
+            return supported;
+          } catch (error) {
+            return true;
+          }
+        }
+        if (!flexGapSupported()) {
+          root.className = root.className ? root.className + " no-flex-gap" : "no-flex-gap";
+        }
+
+        // The legacy stylesheet applies by default; it is only removed when
+        // the browser supports everything the Tailwind v4 bundle needs.
+        // Feature detection is used instead of a user-agent check because
+        // browsers like Pale Moon support some v4 CSS (oklch, color-mix) but
+        // not all of it (@property, individual transform properties).
         var link = document.getElementById("legacy-css");
         if (!link) return;
         try {
           var modern =
             typeof CSS !== "undefined" &&
             CSS.supports &&
+            typeof CSSLayerBlockRule !== "undefined" &&
+            typeof CSSPropertyRule !== "undefined" &&
             CSS.supports("color", "oklch(0 0 0)") &&
-            CSS.supports("color", "color-mix(in srgb, red, blue)");
+            CSS.supports("color", "color-mix(in srgb, red, blue)") &&
+            CSS.supports("selector(:where(a))") &&
+            CSS.supports("translate", "1px");
           if (modern) link.parentNode.removeChild(link);
         } catch (error) {
           /* keep the fallback stylesheet when detection fails */
