@@ -1,5 +1,10 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
 @import "tw-animate-css";
+
+/* Only scan the application source. The default scan also reads prose and the
+   legacy build scripts, where class names in comments would emit unused
+   utilities into the Tailwind v4 bundle. */
+@source "../src";
 
 @custom-variant dark (&:is(.dark *));
 

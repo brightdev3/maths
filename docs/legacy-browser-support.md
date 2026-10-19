@@ -92,3 +92,4 @@ document.head.append(link);
 - **`gap-*` fallbacks are generated automatically** from the compiled CSS, so new spacing values are picked up. If new direction overrides are used (`md:flex-col`, `flex-row-reverse`, `inline-flex`, `gap-x-*`), extend `flexGapFallbacks` in `scripts/build-legacy-css.ts`.
 - **Keep `scripts/legacy/legacy.css` free of** `@layer`, `oklch()`, `color-mix()` and `:is()`/`:where()`, so that it stays valid in old browsers.
 - The Tailwind v3 package is installed as `tailwindcss-v3` (an npm alias of `tailwindcss@^3.4`), so it does not conflict with the v4 `tailwindcss` used by the app.
+- **`src/app.css` restricts Tailwind v4's source scanner** to `src/` (`source(none)` plus `@source "../src"`), so class-like words in this documentation or in `scripts/` cannot emit unused utilities into the v4 bundle. Keep class-bearing files under `src/`, or add another `@source` line.
