@@ -85,6 +85,17 @@ link.href = "/legacy.css";
 document.head.append(link);
 ```
 
+## Deploying
+
+Production (the Coolify app) pulls `ghcr.io/brightdev3/maths:latest`, and the publish workflow enables `:latest` only for the default branch. A manual run on a feature branch therefore pushes `fix-...-<sha>`-style tags without touching production. (GitHub's package page labels the most recently published version "Latest"; that badge is unrelated to the Docker `:latest` tag.)
+
+To deploy the fix there are two ways:
+
+- **Merge into `main`** — the push retags `:latest` and triggers the Coolify webhook.
+- **Without merging**: _Actions → Publish Docker image → Run workflow_, pick the feature branch and tick `publish_latest`. That moves `:latest` to the branch build and triggers Coolify; the next push to `main` moves `:latest` back.
+
+After a deploy, the site footer shows the build running in production (`git:<sha> · build:<timestamp>`), `curl -sI https://maths.devenwei.me/legacy.css` returns 200, and the HTML contains `id="legacy-css"`.
+
 ## Maintenance
 
 - **The feature check** in `src/app.html` must list everything the v4 bundle needs. Check for `oklch()` and `color-mix()` alone is not enough: Pale Moon supports both and still cannot render v4. When Tailwind starts requiring something new, add it.

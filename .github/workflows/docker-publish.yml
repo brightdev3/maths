@@ -12,6 +12,11 @@ on:
       - synchronize
       - reopened
   workflow_dispatch:
+    inputs:
+      publish_latest:
+        description: Also publish this build as :latest (this deploys to production)
+        type: boolean
+        default: false
 
 concurrency:
   group: docker-publish-${{ github.ref }}
@@ -135,6 +140,14 @@ jobs:
               "${src}-amd64" \
               "${src}-arm64"
           done
+
+      - name: Promote :latest to this build (publish_latest)
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_latest == 'true' }}
+        run: |
+          docker buildx imagetools create \
+            --tag "${REGISTRY}/${IMAGE_NAME}:latest" \
+            "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}-amd64" \
+            "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}-arm64"
 
       - name: Trigger Coolify deployment
         run: |
