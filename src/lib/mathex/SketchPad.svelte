@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button";
+  import { renderMath } from "$lib/mathex/content";
   import Eraser from "@lucide/svelte/icons/eraser";
   import Trash from "@lucide/svelte/icons/trash";
   import Type from "@lucide/svelte/icons/type";
@@ -12,9 +13,17 @@
   import Lock from "@lucide/svelte/icons/lock";
   import LockOpen from "@lucide/svelte/icons/lock-open";
   import Move from "@lucide/svelte/icons/move";
+  import Eye from "@lucide/svelte/icons/eye";
+  import Layers2 from "@lucide/svelte/icons/layers-2";
+  import StickyNote from "@lucide/svelte/icons/sticky-note";
+  import FileQuestion from "@lucide/svelte/icons/file-question";
   import X from "@lucide/svelte/icons/x";
 
-  let { open = true, onclose = () => {} }: { open?: boolean; onclose?: () => void } = $props();
+  let {
+    open = true,
+    onclose = () => {},
+    question = ""
+  }: { open?: boolean; onclose?: () => void; question?: string } = $props();
 
   type Point = { x: number; y: number };
   type Stroke = { id: string; points: Point[]; color: string; width: number };
@@ -46,6 +55,7 @@
   };
   type ShapeHandle = "start" | "end" | "nw" | "ne" | "sw" | "se" | "center" | "radius" | `vertex-${number}`;
   type Tool = "pen" | "eraser" | "text" | "interact" | "shape" | "move";
+  type ViewMode = "overlay" | "grid" | "question";
 
   const MIN_W = 60;
   const MIN_H = 36;
@@ -112,6 +122,8 @@
   let shapeKind: ShapeKind = $state("line");
   let polygonSides = $state(3);
   let shapesOpen = $state(false);
+  let viewOpen = $state(false);
+  let view: ViewMode = $state("overlay");
   let regularShapes = $state(false);
   let color = $state("#171717");
   let colorTouched = false;
@@ -607,6 +619,7 @@
     commitText();
     hoverId = null;
     shapesOpen = false;
+    viewOpen = false;
     tool = tool === next ? "pen" : next;
   }
 
@@ -615,6 +628,7 @@
     hoverId = null;
     hoverShapeId = null;
     colorOpen = false;
+    viewOpen = false;
     shapeKind = kind;
     tool = "shape";
   }
@@ -624,6 +638,7 @@
     hoverId = null;
     hoverShapeId = null;
     colorOpen = false;
+    viewOpen = false;
     tool = "move";
   }
 
@@ -631,12 +646,27 @@
     commitText();
     hoverId = null;
     colorOpen = false;
+    viewOpen = false;
     if (shapesOpen) {
       shapesOpen = false;
     } else {
       shapesOpen = true;
       if (tool !== "move") tool = "shape";
     }
+  }
+
+  function toggleView() {
+    commitText();
+    hoverId = null;
+    colorOpen = false;
+    shapesOpen = false;
+    viewOpen = !viewOpen;
+  }
+
+  function chooseView(next: ViewMode) {
+    commitText();
+    view = next;
+    viewOpen = false;
   }
 
   function clampPolygonSides(value: number) {
@@ -888,6 +918,7 @@
     if (!canvas) return;
     colorOpen = false;
     shapesOpen = false;
+    viewOpen = false;
     const p = position(event);
     if (tool === "eraser") {
       selectedId = null;
@@ -1131,6 +1162,12 @@
   aria-label="Sketch pad"
   aria-hidden={open ? undefined : "true"}
 >
+  {#if view !== "overlay"}
+    <div
+      class="absolute inset-0 bg-white dark:bg-black {view === 'grid' ? 'sketch-grid' : ''}"
+      aria-hidden="true"
+    ></div>
+  {/if}
   <div class="relative min-h-0 flex-1">
     <canvas
       bind:this={canvas}
@@ -1141,6 +1178,16 @@
       onpointercancel={onUp}
       onlostpointercapture={onUp}
     ></canvas>
+    {#if view === "question" && question}
+      <div
+        class="pointer-events-auto absolute top-4 left-4 z-10 max-h-[45vh] w-[min(30rem,calc(100vw-2rem))] overflow-auto rounded-md border border-border bg-card/90 p-4 shadow-sm"
+      >
+        <p class="mb-2 text-[0.65rem] font-bold tracking-[0.16em] text-primary uppercase">Question</p>
+        <div class="prose prose-stone max-w-none text-sm dark:prose-invert">
+          {@html renderMath(question)}
+        </div>
+      </div>
+    {/if}
     {#if tool === "eraser" && eraserPos}
       {@const diameter = eraserRadius() * 2}
       <div
@@ -1305,6 +1352,63 @@
       >
         <MousePointer2 class="h-4 w-4" />
       </button>
+      <div class="relative">
+        <button
+          type="button"
+          class="flex h-8 w-8 items-center justify-center rounded-[3px] transition-colors {view !== 'overlay' ||
+          viewOpen
+            ? 'bg-primary text-primary-foreground shadow'
+            : 'text-muted-foreground hover:bg-muted'}"
+          onclick={toggleView}
+          aria-haspopup="true"
+          aria-expanded={viewOpen}
+          aria-label="View"
+          title="View"
+        >
+          <Eye class="h-4 w-4" />
+        </button>
+        {#if viewOpen}
+          <div
+            class="absolute bottom-10 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-xl border border-border bg-card p-2 shadow"
+            role="group"
+            aria-label="View options"
+          >
+            <Button
+              variant={view === "overlay" ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => chooseView("overlay")}
+              aria-label="On top of page"
+              aria-pressed={view === "overlay"}
+              title="On top of page"
+            >
+              <Layers2 class="h-4 w-4" />
+            </Button>
+            <Button
+              variant={view === "grid" ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => chooseView("grid")}
+              aria-label="Dot grid"
+              aria-pressed={view === "grid"}
+              title="Dot grid background"
+            >
+              <StickyNote class="h-4 w-4" />
+            </Button>
+            <Button
+              variant={view === "question" ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => chooseView("question")}
+              aria-label="Question view"
+              aria-pressed={view === "question"}
+              title="Question view"
+            >
+              <FileQuestion class="h-4 w-4" />
+            </Button>
+          </div>
+        {/if}
+      </div>
       <button
         type="button"
         class="flex h-8 w-8 items-center justify-center rounded-full transition-colors text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
@@ -1337,6 +1441,7 @@
         onclick={() => {
           colorOpen = !colorOpen;
           shapesOpen = false;
+          viewOpen = false;
         }}
       ></button>
       {#if colorOpen}
@@ -1617,3 +1722,14 @@
     </Button>
   </div>
 </div>
+
+<style>
+  .sketch-grid {
+    background-image: radial-gradient(circle, rgb(0 0 0 / 0.14) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  :global(.dark) .sketch-grid {
+    background-image: radial-gradient(circle, rgb(255 255 255 / 0.18) 1px, transparent 1px);
+  }
+</style>
