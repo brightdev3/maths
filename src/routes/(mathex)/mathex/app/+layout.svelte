@@ -17,6 +17,9 @@
   const usesSiteShell = $derived(
     page.url.pathname.startsWith("/mathex/app") && !page.url.pathname.startsWith("/mathex/app/create/editor")
   );
+  const showSiteNav = $derived(
+    !page.url.pathname.startsWith("/mathex/app/manage") && !page.url.pathname.startsWith("/mathex/app/play")
+  );
 </script>
 
 <svelte:head>
@@ -27,7 +30,7 @@
 <DisclaimerDialog />
 {#if usesSiteShell}
   <div class="flex min-h-screen flex-col bg-background text-foreground">
-    <SiteNav />
+    {#if showSiteNav}<SiteNav />{/if}
     <main class="flex-1">{@render children?.()}</main>
     <SiteFooter />
   </div>
