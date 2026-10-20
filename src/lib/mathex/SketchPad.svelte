@@ -9,10 +9,8 @@
   import Redo from "@lucide/svelte/icons/redo";
   import MousePointer2 from "@lucide/svelte/icons/mouse-pointer-2";
   import Shapes from "@lucide/svelte/icons/shapes";
-  import Minus from "@lucide/svelte/icons/minus";
-  import Square from "@lucide/svelte/icons/square";
-  import Circle from "@lucide/svelte/icons/circle";
-  import Proportions from "@lucide/svelte/icons/proportions";
+  import Lock from "@lucide/svelte/icons/lock";
+  import LockOpen from "@lucide/svelte/icons/lock-open";
   import X from "@lucide/svelte/icons/x";
 
   let { open = true, onclose = () => {} }: { open?: boolean; onclose?: () => void } = $props();
@@ -30,20 +28,22 @@
     fontSize: number;
   };
   type EditorState = { id: string | null; x: number; y: number };
-  type ShapeKind = "line" | "rect" | "ellipse" | "circle";
+  type ShapeKind = "line" | "rect" | "ellipse" | "circle" | "polygon";
   type Shape = {
     id: string;
     kind: ShapeKind;
     // line: (x, y) -> (x + w, y + h); rect/ellipse: bounding box;
-    // circle: x/y is the centre and w/h is the radius.
+    // circle: x/y is the centre and (w, h) points at the circumference;
+    // polygon: points holds the vertices and x/y/w/h its bounding box.
     x: number;
     y: number;
     w: number;
     h: number;
     color: string;
     width: number;
+    points?: Point[];
   };
-  type ShapeHandle = "start" | "end" | "nw" | "ne" | "sw" | "se" | "center" | "radius";
+  type ShapeHandle = "start" | "end" | "nw" | "ne" | "sw" | "se" | "center" | "radius" | `vertex-${number}`;
   type Tool = "pen" | "eraser" | "text" | "interact" | "shape";
 
   const MIN_W = 60;
@@ -109,6 +109,7 @@
   let currentStroke: Stroke | null = null;
   let tool: Tool = $state("pen");
   let shapeKind: ShapeKind = $state("line");
+  let polygonSides = $state(5);
   let shapesOpen = $state(false);
   let regularShapes = $state(false);
   let color = $state("#171717");
@@ -144,7 +145,7 @@
   let moveDrag: { id: string; lastX: number; lastY: number } | null = null;
   let resizeDrag: { id: string; startW: number; startH: number; startX: number; startY: number } | null = null;
   let shapeDraw: { id: string; startX: number; startY: number } | null = null;
-  let shapeHandleDrag: { id: string; handle: ShapeHandle } | null = null;
+  let shapeHandleDrag: { id: string; handle: ShapeHandle; anchorX: number; anchorY: number } | null = null;
   let shapeMoveDrag: { id: string; lastX: number; lastY: number } | null = null;
 
   const colors = ["#171717", "#ffffff", "#dc2626", "#2563eb", "#16a34a", "#9333ea", "#ea580c"];
@@ -263,8 +264,14 @@
         0,
         Math.PI * 2
       );
+    } else if (shape.kind === "polygon") {
+      const points = shape.points ?? [];
+      if (points.length < 2) return;
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+      ctx.closePath();
     } else {
-      ctx.arc(shape.x, shape.y, Math.abs(shape.w), 0, Math.PI * 2);
+      ctx.arc(shape.x, shape.y, Math.hypot(shape.w, shape.h), 0, Math.PI * 2);
     }
     ctx.stroke();
   }
@@ -375,13 +382,47 @@
     return { x, y, w: Math.abs(shape.w), h: Math.abs(shape.h) };
   }
 
+  function refreshPolygonBox(shape: Shape) {
+    const points = shape.points ?? [];
+    if (points.length === 0) {
+      shape.w = 0;
+      shape.h = 0;
+      return;
+    }
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    shape.x = Math.min(...xs);
+    shape.y = Math.min(...ys);
+    shape.w = Math.max(...xs) - shape.x;
+    shape.h = Math.max(...ys) - shape.y;
+  }
+
+  function translateShape(shape: Shape, dx: number, dy: number) {
+    shape.x += dx;
+    shape.y += dy;
+    if (shape.kind === "polygon") {
+      for (const point of shape.points ?? []) {
+        point.x += dx;
+        point.y += dy;
+      }
+    }
+  }
+
   function shapeHit(shape: Shape, p: Point, tol = 6) {
     const reach = tol + shape.width / 2;
     if (shape.kind === "line") {
       return distToSegment(p, { x: shape.x, y: shape.y }, { x: shape.x + shape.w, y: shape.y + shape.h }) <= reach;
     }
     if (shape.kind === "circle") {
-      return Math.abs(Math.hypot(p.x - shape.x, p.y - shape.y) - Math.abs(shape.w)) <= reach;
+      return Math.abs(Math.hypot(p.x - shape.x, p.y - shape.y) - Math.hypot(shape.w, shape.h)) <= reach;
+    }
+    if (shape.kind === "polygon") {
+      const points = shape.points ?? [];
+      if (points.length < 2) return false;
+      for (let i = 0; i < points.length; i++) {
+        if (distToSegment(p, points[i], points[(i + 1) % points.length]) <= reach) return true;
+      }
+      return false;
     }
     const box = shapeBox(shape);
     if (shape.kind === "rect") {
@@ -413,8 +454,15 @@
     if (shape.kind === "circle") {
       return [
         { key: "center", x: shape.x, y: shape.y },
-        { key: "radius", x: shape.x + Math.abs(shape.w), y: shape.y }
+        { key: "radius", x: shape.x + shape.w, y: shape.y + shape.h }
       ];
+    }
+    if (shape.kind === "polygon") {
+      return (shape.points ?? []).map((point, index) => ({
+        key: `vertex-${index}` as ShapeHandle,
+        x: point.x,
+        y: point.y
+      }));
     }
     const box = shapeBox(shape);
     return [
@@ -565,7 +613,6 @@
     colorOpen = false;
     shapeKind = kind;
     tool = "shape";
-    shapesOpen = false;
   }
 
   function toggleShapes() {
@@ -600,8 +647,27 @@
     if (shape.kind === "circle") {
       shape.x = draw.startX;
       shape.y = draw.startY;
-      shape.w = Math.hypot(p.x - draw.startX, p.y - draw.startY);
-      shape.h = shape.w;
+      shape.w = p.x - draw.startX;
+      shape.h = p.y - draw.startY;
+      return;
+    }
+    if (shape.kind === "polygon") {
+      const sides = Math.min(24, Math.max(3, Math.round(polygonSides) || 3));
+      const radius = Math.hypot(p.x - draw.startX, p.y - draw.startY);
+      if (radius < 1) {
+        shape.points = [];
+        refreshPolygonBox(shape);
+        return;
+      }
+      const startAngle = Math.atan2(p.y - draw.startY, p.x - draw.startX);
+      shape.points = Array.from({ length: sides }, (_, index) => {
+        const angle = startAngle + (index * Math.PI * 2) / sides;
+        return {
+          x: draw.startX + Math.cos(angle) * radius,
+          y: draw.startY + Math.sin(angle) * radius
+        };
+      });
+      refreshPolygonBox(shape);
       return;
     }
     let dx = p.x - draw.startX;
@@ -617,7 +683,40 @@
     shape.h = Math.abs(dy);
   }
 
-  function updateShapeHandle(shape: Shape, handle: ShapeHandle, p: Point, constrain: boolean) {
+  function updateShapeHandle(
+    shape: Shape,
+    handle: ShapeHandle,
+    p: Point,
+    constrain: boolean,
+    anchorX: number,
+    anchorY: number
+  ) {
+    if (shape.kind === "polygon") {
+      const points = shape.points ?? [];
+      const index = Number(handle.replace("vertex-", ""));
+      const vertex = points[index];
+      if (!vertex) return;
+      if (constrain) {
+        // Scale every vertex around the polygon's centre so the whole
+        // shape grows or shrinks proportionally.
+        const centre = points.reduce(
+          (acc, point) => ({ x: acc.x + point.x / points.length, y: acc.y + point.y / points.length }),
+          { x: 0, y: 0 }
+        );
+        const oldRadius = Math.hypot(vertex.x - centre.x, vertex.y - centre.y);
+        if (oldRadius < 0.001) return;
+        const scale = Math.max(0.05, Math.hypot(p.x - centre.x, p.y - centre.y) / oldRadius);
+        shape.points = points.map((point) => ({
+          x: centre.x + (point.x - centre.x) * scale,
+          y: centre.y + (point.y - centre.y) * scale
+        }));
+      } else {
+        vertex.x = p.x;
+        vertex.y = p.y;
+      }
+      refreshPolygonBox(shape);
+      return;
+    }
     if (shape.kind === "line") {
       if (handle === "start") {
         const endX = shape.x + shape.w;
@@ -639,21 +738,10 @@
         shape.x = p.x;
         shape.y = p.y;
       } else {
-        shape.w = Math.hypot(p.x - shape.x, p.y - shape.y);
-        shape.h = shape.w;
+        shape.w = p.x - shape.x;
+        shape.h = p.y - shape.y;
       }
       return;
-    }
-    const box = shapeBox(shape);
-    let anchorX = box.x;
-    let anchorY = box.y;
-    if (handle === "nw") {
-      anchorX = box.x + box.w;
-      anchorY = box.y + box.h;
-    } else if (handle === "ne") {
-      anchorY = box.y + box.h;
-    } else if (handle === "sw") {
-      anchorX = box.x + box.w;
     }
     let dx = p.x - anchorX;
     let dy = p.y - anchorY;
@@ -676,7 +764,22 @@
     if (selected) {
       const handle = shapeHandleAt(p, selected);
       if (handle) {
-        shapeHandleDrag = { id: selected.id, handle };
+        let anchorX = 0;
+        let anchorY = 0;
+        if (selected.kind === "rect" || selected.kind === "ellipse") {
+          const box = shapeBox(selected);
+          anchorX = box.x;
+          anchorY = box.y;
+          if (handle === "nw") {
+            anchorX = box.x + box.w;
+            anchorY = box.y + box.h;
+          } else if (handle === "ne") {
+            anchorY = box.y + box.h;
+          } else if (handle === "sw") {
+            anchorX = box.x + box.w;
+          }
+        }
+        shapeHandleDrag = { id: selected.id, handle, anchorX, anchorY };
         capturePointer(event.target, event.pointerId);
         return;
       }
@@ -690,7 +793,9 @@
     }
     selectedId = null;
     const id = `sh-${Date.now().toString(36)}-${nextId++}`;
-    shapes.push({ id, kind: shapeKind, x: p.x, y: p.y, w: 0, h: 0, color, width: lineWidth });
+    const shape: Shape = { id, kind: shapeKind, x: p.x, y: p.y, w: 0, h: 0, color, width: lineWidth };
+    if (shapeKind === "polygon") shape.points = [];
+    shapes.push(shape);
     shapeDraw = { id, startX: p.x, startY: p.y };
     capturePointer(event.target, event.pointerId);
     redraw();
@@ -782,8 +887,7 @@
       const shape = shapes.find((s) => s.id === shapeMove.id);
       if (shape) {
         const p = position(event);
-        shape.x += p.x - shapeMove.lastX;
-        shape.y += p.y - shapeMove.lastY;
+        translateShape(shape, p.x - shapeMove.lastX, p.y - shapeMove.lastY);
         shapeMove.lastX = p.x;
         shapeMove.lastY = p.y;
         redraw();
@@ -794,7 +898,14 @@
     if (shapeHandle) {
       const shape = shapes.find((s) => s.id === shapeHandle.id);
       if (shape) {
-        updateShapeHandle(shape, shapeHandle.handle, position(event), regularShapes || event.shiftKey);
+        updateShapeHandle(
+          shape,
+          shapeHandle.handle,
+          position(event),
+          regularShapes || event.shiftKey,
+          shapeHandle.anchorX,
+          shapeHandle.anchorY
+        );
         redraw();
       }
       return;
@@ -919,9 +1030,12 @@
       shape.kind === "line"
         ? Math.hypot(shape.w, shape.h)
         : shape.kind === "circle"
-          ? Math.abs(shape.w)
-          : Math.min(Math.abs(shape.w), Math.abs(shape.h));
-    if (span < 2) {
+          ? Math.hypot(shape.w, shape.h)
+          : shape.kind === "polygon"
+            ? Math.max(Math.abs(shape.w), Math.abs(shape.h))
+            : Math.min(Math.abs(shape.w), Math.abs(shape.h));
+    const tooSmall = shape.kind === "polygon" ? (shape.points?.length ?? 0) < 3 || span < 2 : span < 2;
+    if (tooSmall) {
       shapes = shapes.filter((s) => s.id !== id);
       if (selectedId === id) selectedId = null;
       return;
@@ -998,7 +1112,7 @@
     {#if selectedShape && tool === "shape"}
       {@const shape = selectedShape}
       {@const handles = shapeHandlePoints(shape)}
-      {#if shape.kind === "line"}
+      {#if shape.kind === "circle"}
         <svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
           <line
             x1={shape.x}
@@ -1011,25 +1125,7 @@
             stroke-dasharray="4 4"
           />
         </svg>
-      {:else if shape.kind === "circle"}
-        {@const radius = Math.abs(shape.w)}
-        <div
-          class="pointer-events-none absolute rounded-full border-2 border-dashed border-primary/60"
-          style="left: {shape.x - radius}px; top: {shape.y - radius}px; width: {radius * 2}px; height: {radius * 2}px;"
-        ></div>
-        <svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-          <line
-            x1={shape.x}
-            y1={shape.y}
-            x2={shape.x + radius}
-            y2={shape.y}
-            class="text-primary"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-dasharray="4 4"
-          />
-        </svg>
-      {:else}
+      {:else if shape.kind === "ellipse"}
         {@const box = shapeBox(shape)}
         <div
           class="pointer-events-none absolute rounded-sm border-2 border-dashed border-primary"
@@ -1235,6 +1331,22 @@
         >
           <div class="flex items-center gap-1.5">
             <Button
+              variant={regularShapes ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => (regularShapes = !regularShapes)}
+              aria-label={regularShapes ? "Unlock regular shapes" : "Lock regular shapes"}
+              aria-pressed={regularShapes}
+              title={regularShapes ? "Regular shapes locked" : "Regular shapes unlocked (freeform)"}
+            >
+              {#if regularShapes}
+                <Lock class="h-4 w-4" />
+              {:else}
+                <LockOpen class="h-4 w-4" />
+              {/if}
+            </Button>
+            <div class="mx-0.5 h-6 w-px shrink-0 bg-border" aria-hidden="true"></div>
+            <Button
               variant={tool === "shape" && shapeKind === "line" ? "default" : "ghost"}
               size="icon"
               class="size-8"
@@ -1243,7 +1355,17 @@
               aria-pressed={tool === "shape" && shapeKind === "line"}
               title="Line (drag between endpoints)"
             >
-              <Minus class="h-4 w-4" />
+              <svg
+                class="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <line x1="5" y1="19" x2="19" y2="5" />
+              </svg>
             </Button>
             <Button
               variant={tool === "shape" && shapeKind === "ellipse" ? "default" : "ghost"}
@@ -1254,7 +1376,16 @@
               aria-pressed={tool === "shape" && shapeKind === "ellipse"}
               title="Ellipse (drag a box)"
             >
-              <Circle class="h-4 w-4 scale-y-50" />
+              <svg
+                class="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <ellipse cx="12" cy="12" rx="9" ry="6" />
+              </svg>
             </Button>
             <Button
               variant={tool === "shape" && shapeKind === "rect" ? "default" : "ghost"}
@@ -1265,7 +1396,17 @@
               aria-pressed={tool === "shape" && shapeKind === "rect"}
               title="Rectangle (drag a box)"
             >
-              <Square class="h-4 w-4" />
+              <svg
+                class="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="4" y="6" width="16" height="12" rx="1" />
+              </svg>
             </Button>
             <Button
               variant={tool === "shape" && shapeKind === "circle" ? "default" : "ghost"}
@@ -1276,22 +1417,61 @@
               aria-pressed={tool === "shape" && shapeKind === "circle"}
               title="Circle (drag from the centre)"
             >
-              <Circle class="h-4 w-4" />
+              <svg
+                class="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="7.5" />
+              </svg>
             </Button>
-          </div>
-          <div class="flex justify-center border-t border-border pt-1">
             <Button
-              variant={regularShapes ? "default" : "ghost"}
+              variant={tool === "shape" && shapeKind === "polygon" ? "default" : "ghost"}
               size="icon"
               class="size-8"
-              onclick={() => (regularShapes = !regularShapes)}
-              aria-label="Regular shapes"
-              aria-pressed={regularShapes}
-              title="Regular shapes (or hold Shift)"
+              onclick={() => chooseShape("polygon")}
+              aria-label="Polygon"
+              aria-pressed={tool === "shape" && shapeKind === "polygon"}
+              title="Polygon (drag from the centre)"
             >
-              <Proportions class="h-4 w-4" />
+              <svg
+                class="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m12.828 4.813 5.344 2.375" />
+                <path d="m15.769 18.153 3.461-8.306" />
+                <path d="m5.687 14.074 7.625 4.852" />
+                <path d="M9.772 5.579 5.228 11.42" />
+                <circle cx="11" cy="4" r="2" />
+                <circle cx="15" cy="20" r="2" />
+                <circle cx="20" cy="8" r="2" />
+                <circle cx="4" cy="13" r="2" />
+              </svg>
             </Button>
           </div>
+          {#if shapeKind === "polygon"}
+            <div class="flex items-center justify-center gap-1.5 border-t border-border pt-1">
+              <span class="text-[10px] uppercase tracking-wide text-muted-foreground">Sides</span>
+              <input
+                type="number"
+                min={3}
+                max={24}
+                bind:value={polygonSides}
+                aria-label="Polygon sides"
+                title="Number of polygon sides"
+                class="h-7 w-12 rounded-[3px] border border-border bg-transparent text-center text-xs"
+              />
+            </div>
+          {/if}
         </div>
       {/if}
     </div>
