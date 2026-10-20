@@ -11,6 +11,7 @@
   import Shapes from "@lucide/svelte/icons/shapes";
   import Lock from "@lucide/svelte/icons/lock";
   import LockOpen from "@lucide/svelte/icons/lock-open";
+  import Move from "@lucide/svelte/icons/move";
   import X from "@lucide/svelte/icons/x";
 
   let { open = true, onclose = () => {} }: { open?: boolean; onclose?: () => void } = $props();
@@ -44,7 +45,7 @@
     points?: Point[];
   };
   type ShapeHandle = "start" | "end" | "nw" | "ne" | "sw" | "se" | "center" | "radius" | `vertex-${number}`;
-  type Tool = "pen" | "eraser" | "text" | "interact" | "shape";
+  type Tool = "pen" | "eraser" | "text" | "interact" | "shape" | "move";
 
   const MIN_W = 60;
   const MIN_H = 36;
@@ -109,7 +110,7 @@
   let currentStroke: Stroke | null = null;
   let tool: Tool = $state("pen");
   let shapeKind: ShapeKind = $state("line");
-  let polygonSides = $state(5);
+  let polygonSides = $state(3);
   let shapesOpen = $state(false);
   let regularShapes = $state(false);
   let color = $state("#171717");
@@ -142,6 +143,7 @@
   let colorOpen = $state(false);
   let eraserPos: Point | null = $state(null);
   let hoverId: string | null = $state(null);
+  let hoverShapeId: string | null = $state(null);
   let moveDrag: { id: string; lastX: number; lastY: number } | null = null;
   let resizeDrag: { id: string; startW: number; startH: number; startX: number; startY: number } | null = null;
   let shapeDraw: { id: string; startX: number; startY: number } | null = null;
@@ -153,6 +155,7 @@
   const selectedBox = $derived(boxes.find((b) => b.id === selectedId) ?? null);
   const selectedShape = $derived(shapes.find((s) => s.id === selectedId) ?? null);
   const hoverBox = $derived(boxes.find((b) => b.id === hoverId) ?? null);
+  const hoverShape = $derived(shapes.find((s) => s.id === hoverShapeId) ?? null);
   const editorBox = $derived.by(() => {
     const ed = editor;
     if (!ed || !ed.id) return null;
@@ -610,9 +613,18 @@
   function chooseShape(kind: ShapeKind) {
     commitText();
     hoverId = null;
+    hoverShapeId = null;
     colorOpen = false;
     shapeKind = kind;
     tool = "shape";
+  }
+
+  function chooseMove() {
+    commitText();
+    hoverId = null;
+    hoverShapeId = null;
+    colorOpen = false;
+    tool = "move";
   }
 
   function toggleShapes() {
@@ -623,8 +635,30 @@
       shapesOpen = false;
     } else {
       shapesOpen = true;
-      tool = "shape";
+      if (tool !== "move") tool = "shape";
     }
+  }
+
+  function clampPolygonSides(value: number) {
+    return Math.min(24, Math.max(3, Math.round(value) || 3));
+  }
+
+  function onPolygonSidesInput(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const raw = input.valueAsNumber;
+    if (!Number.isFinite(raw) || raw < 3) return;
+    if (raw > 24) {
+      polygonSides = 24;
+      input.value = "24";
+    } else {
+      polygonSides = raw;
+    }
+  }
+
+  function onPolygonSidesChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    polygonSides = clampPolygonSides(input.valueAsNumber);
+    input.value = String(polygonSides);
   }
 
   function lineEnd(startX: number, startY: number, endX: number, endY: number, constrain: boolean): Point {
@@ -756,10 +790,7 @@
     shape.h = Math.abs(dy);
   }
 
-  function shapeDown(event: PointerEvent, p: Point) {
-    colorOpen = false;
-    shapesOpen = false;
-    commitText();
+  function moveShapeDown(event: PointerEvent, p: Point) {
     const selected = selectedShape;
     if (selected) {
       const handle = shapeHandleAt(p, selected);
@@ -787,8 +818,21 @@
     const hit = [...shapes].reverse().find((s) => shapeHit(s, p));
     if (hit) {
       selectedId = hit.id;
+      hoverShapeId = hit.id;
       shapeMoveDrag = { id: hit.id, lastX: p.x, lastY: p.y };
       capturePointer(event.target, event.pointerId);
+      return;
+    }
+    selectedId = null;
+    hoverShapeId = null;
+  }
+
+  function shapeDown(event: PointerEvent, p: Point) {
+    colorOpen = false;
+    shapesOpen = false;
+    commitText();
+    if (tool === "move") {
+      moveShapeDown(event, p);
       return;
     }
     selectedId = null;
@@ -846,19 +890,24 @@
     shapesOpen = false;
     const p = position(event);
     if (tool === "eraser") {
+      selectedId = null;
+      hoverShapeId = null;
       commitText();
       eraseAt(p);
       capturePointer(event.target, event.pointerId);
       return;
     }
     if (tool === "text") {
+      hoverShapeId = null;
       textDown(event, p);
       return;
     }
-    if (tool === "shape") {
+    if (tool === "shape" || tool === "move") {
       shapeDown(event, p);
       return;
     }
+    selectedId = null;
+    hoverShapeId = null;
     commitText();
     capturePointer(event.target, event.pointerId);
     drawing = true;
@@ -879,6 +928,12 @@
       if (tool === "text") {
         const p = position(event);
         hoverId = [...boxes].reverse().find((b) => insideBox(p, b, 0))?.id ?? null;
+      }
+      if (tool === "move") {
+        const p = position(event);
+        hoverShapeId = [...shapes].reverse().find((s) => shapeHit(s, p))?.id ?? null;
+      } else {
+        hoverShapeId = null;
       }
       return;
     }
@@ -980,10 +1035,8 @@
     if (!hit) {
       // Clicking away exits the open editor (stamping first) but the
       // click itself still reaches the page behind.
-      if (editor) {
-        commitText();
-        selectedId = null;
-      }
+      if (editor) commitText();
+      selectedId = null;
       return;
     }
     event.preventDefault();
@@ -1040,7 +1093,7 @@
       if (selectedId === id) selectedId = null;
       return;
     }
-    selectedId = id;
+    selectedId = null;
   }
 
   function onUp() {
@@ -1109,7 +1162,7 @@
         ></div>
       </div>
     {/if}
-    {#if selectedShape && tool === "shape"}
+    {#if selectedShape && tool === "move"}
       {@const shape = selectedShape}
       {@const handles = shapeHandlePoints(shape)}
       {#if shape.kind === "circle"}
@@ -1139,12 +1192,70 @@
         ></div>
       {/each}
     {/if}
+    {#if hoverShape && tool === "move" && hoverShape.id !== selectedId}
+      {@const shape = hoverShape}
+      <svg class="pointer-events-none absolute inset-0 h-full w-full" fill="none" aria-hidden="true">
+        {#if shape.kind === "line"}
+          <line
+            x1={shape.x}
+            y1={shape.y}
+            x2={shape.x + shape.w}
+            y2={shape.y + shape.h}
+            class="text-primary/70"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-dasharray="4 4"
+          />
+        {:else if shape.kind === "rect"}
+          <rect
+            x={shape.x}
+            y={shape.y}
+            width={shape.w}
+            height={shape.h}
+            class="text-primary/70"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-dasharray="4 4"
+          />
+        {:else if shape.kind === "ellipse"}
+          <ellipse
+            cx={shape.x + shape.w / 2}
+            cy={shape.y + shape.h / 2}
+            rx={Math.abs(shape.w) / 2}
+            ry={Math.abs(shape.h) / 2}
+            class="text-primary/70"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-dasharray="4 4"
+          />
+        {:else if shape.kind === "circle"}
+          <circle
+            cx={shape.x}
+            cy={shape.y}
+            r={Math.hypot(shape.w, shape.h)}
+            class="text-primary/70"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-dasharray="4 4"
+          />
+        {:else if shape.kind === "polygon"}
+          <polygon
+            points={(shape.points ?? []).map((point) => `${point.x},${point.y}`).join(" ")}
+            class="text-primary/70"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-dasharray="4 4"
+            stroke-linejoin="round"
+          />
+        {/if}
+      </svg>
+    {/if}
     {#if hoverBox && hoverBox.id !== selectedId && (tool === "text" || tool === "interact")}
       <div
         class="pointer-events-none absolute"
         style="left: {hoverBox.x}px; top: {hoverBox.y}px; width: {hoverBox.w}px; height: {hoverBox.h}px;"
       >
-        <div class="absolute inset-0 rounded-sm border-2 border-dashed border-primary/40"></div>
+        <div class="absolute inset-0 rounded-sm border-2 border-dashed border-primary/70"></div>
       </div>
     {/if}
     {#if editor}
@@ -1176,6 +1287,9 @@
     tabindex={-1}
     onpointerdown={() => {
       if (editor) commitText();
+      selectedId = null;
+      hoverId = null;
+      hoverShapeId = null;
     }}
   >
     <div class="flex items-center gap-0.5">
@@ -1312,7 +1426,7 @@
     </Button>
     <div class="relative">
       <Button
-        variant={tool === "shape" ? "default" : "ghost"}
+        variant={tool === "shape" || tool === "move" ? "default" : "ghost"}
         size="icon"
         class="size-8"
         onclick={toggleShapes}
@@ -1344,6 +1458,17 @@
               {:else}
                 <LockOpen class="h-4 w-4" />
               {/if}
+            </Button>
+            <Button
+              variant={tool === "move" ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={chooseMove}
+              aria-label="Move"
+              aria-pressed={tool === "move"}
+              title="Move and adjust shapes"
+            >
+              <Move class="h-4 w-4" />
             </Button>
             <div class="mx-0.5 h-6 w-px shrink-0 bg-border" aria-hidden="true"></div>
             <Button
@@ -1465,7 +1590,9 @@
                 type="number"
                 min={3}
                 max={24}
-                bind:value={polygonSides}
+                value={polygonSides}
+                oninput={onPolygonSidesInput}
+                onchange={onPolygonSidesChange}
                 aria-label="Polygon sides"
                 title="Number of polygon sides"
                 class="h-7 w-12 rounded-[3px] border border-border bg-transparent text-center text-xs"
