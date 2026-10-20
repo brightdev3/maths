@@ -1412,10 +1412,7 @@
       <div class="relative">
         <button
           type="button"
-          class="flex h-8 w-8 items-center justify-center rounded-[3px] transition-colors {view !== 'overlay' ||
-          viewOpen
-            ? 'bg-primary text-primary-foreground shadow'
-            : 'text-muted-foreground hover:bg-muted'}"
+          class="flex h-8 w-8 items-center justify-center rounded-[3px] text-muted-foreground transition-colors hover:bg-muted"
           onclick={toggleView}
           aria-haspopup="true"
           aria-expanded={viewOpen}
