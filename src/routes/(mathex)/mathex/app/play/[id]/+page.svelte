@@ -118,6 +118,12 @@
     skippable: true
   });
   let startingTime: number | null = $state(null);
+  let sketchAnswerType = $derived.by(() => {
+    if (currentQuestion.requireAllSolutionGroups) return null;
+    const group = currentQuestion.answerGroups[0];
+    if (!group || group.length !== 1) return null;
+    return group[0];
+  });
   let timePassed = $state(0);
   setInterval(() => {
     if (!startingTime) timePassed = 0;
@@ -290,6 +296,11 @@
       return;
     }
     socket.emit("answer", Array.isArray(submittedAnswer) ? (submittedAnswer as (string | number)[]) : submittedAnswer);
+  }
+
+  function submitSketchAnswer(value: string | number) {
+    answer = value;
+    submitAnswer();
   }
 
   function executeSkip() {
@@ -660,6 +671,8 @@
       open={sketchOpen && roomSettings?.allowSketch !== false}
       onclose={() => (sketchOpen = false)}
       question={currentQuestion.content}
+      answerType={sketchAnswerType}
+      onanswersubmit={submitSketchAnswer}
     />
   {:else if gameState === "finished"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">

@@ -2,6 +2,9 @@
   import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import { renderMath } from "$lib/mathex/content";
+  import NumberAnswer from "$lib/mathex/answers/NumberAnswer.svelte";
+  import TextAnswer from "$lib/mathex/answers/TextAnswer.svelte";
+  import ExpressionAnswer from "$lib/mathex/answers/ExpressionAnswer.svelte";
   import Eraser from "@lucide/svelte/icons/eraser";
   import Trash from "@lucide/svelte/icons/trash";
   import Type from "@lucide/svelte/icons/type";
@@ -19,11 +22,22 @@
   import FileQuestion from "@lucide/svelte/icons/file-question";
   import X from "@lucide/svelte/icons/x";
 
+  type AnswerType = "number" | "text" | "expression";
+  type AnswerValue = string | number | null;
+
   let {
     open = true,
     onclose = () => {},
-    question = ""
-  }: { open?: boolean; onclose?: () => void; question?: string } = $props();
+    question = "",
+    answerType = null,
+    onanswersubmit = undefined
+  }: {
+    open?: boolean;
+    onclose?: () => void;
+    question?: string;
+    answerType?: AnswerType | null;
+    onanswersubmit?: (answer: string | number) => void;
+  } = $props();
 
   type Point = { x: number; y: number };
   type Stroke = { id: string; points: Point[]; color: string; width: number };
@@ -118,13 +132,14 @@
 
   let drawing = $state(false);
   let currentStroke: Stroke | null = null;
-  let tool: Tool = $state("pen");
+  let tool = $state<Tool>("pen");
   let shapeKind: ShapeKind = $state("line");
   let polygonSides = $state(3);
   let shapesOpen = $state(false);
   let viewOpen = $state(false);
   let view: ViewMode = $state("overlay");
   let regularShapes = $state(false);
+  let sketchAnswer = $state<AnswerValue>(null);
   let color = $state("#171717");
   let colorTouched = false;
 
@@ -168,6 +183,19 @@
   const selectedShape = $derived(shapes.find((s) => s.id === selectedId) ?? null);
   const hoverBox = $derived(boxes.find((b) => b.id === hoverId) ?? null);
   const hoverShape = $derived(shapes.find((s) => s.id === hoverShapeId) ?? null);
+  const canShowQuestion = $derived(question.trim() !== "" && !!answerType && !!onanswersubmit);
+  const pageInteraction = $derived(tool === "interact" && view === "overlay");
+  const canSubmitSketch = $derived(sketchAnswer !== null && sketchAnswer !== "");
+
+  $effect(() => {
+    question;
+    answerType;
+    sketchAnswer = null;
+  });
+
+  $effect(() => {
+    if (!canShowQuestion && view === "question") view = "overlay";
+  });
   const editorBox = $derived.by(() => {
     const ed = editor;
     if (!ed || !ed.id) return null;
@@ -669,6 +697,11 @@
     viewOpen = false;
   }
 
+  function submitSketchAnswer() {
+    if (!onanswersubmit || !canSubmitSketch || sketchAnswer === null) return;
+    onanswersubmit(sketchAnswer);
+  }
+
   function clampPolygonSides(value: number) {
     return Math.min(24, Math.max(3, Math.round(value) || 3));
   }
@@ -919,6 +952,10 @@
     colorOpen = false;
     shapesOpen = false;
     viewOpen = false;
+    if (tool === "interact") {
+      commitText();
+      return;
+    }
     const p = position(event);
     if (tool === "eraser") {
       selectedId = null;
@@ -1094,7 +1131,7 @@
   // In interact mode the page behind receives pointer events, so watch
   // for an answer being submitted and close the pad afterwards.
   $effect(() => {
-    if (tool === "interact" && open) {
+    if (pageInteraction && open) {
       const close = () => onclose();
       window.addEventListener("submit", close, true);
       window.addEventListener("pointerdown", interactDown, true);
@@ -1157,7 +1194,7 @@
 </script>
 
 <div
-  class="fixed inset-0 z-50 flex flex-col {open ? '' : 'hidden'} {tool === 'interact' ? 'pointer-events-none' : ''}"
+  class="fixed inset-0 z-50 flex flex-col {open ? '' : 'hidden'} {pageInteraction ? 'pointer-events-none' : ''}"
   role="dialog"
   aria-label="Sketch pad"
   aria-hidden={open ? undefined : "true"}
@@ -1168,20 +1205,40 @@
       aria-hidden="true"
     ></div>
   {/if}
-  {#if view === "question" && question}
+  {#if view === "question" && canShowQuestion}
     <div
-      class="pointer-events-none absolute top-4 left-4 max-h-[45vh] w-[min(30rem,calc(100vw-2rem))] overflow-auto rounded-md border border-border bg-card/90 p-4 shadow-sm"
+      class="{tool === 'interact'
+        ? 'pointer-events-auto z-10'
+        : 'pointer-events-none'} absolute top-4 left-4 max-h-[45vh] w-[min(30rem,calc(100vw-2rem))] overflow-auto rounded-md border border-border bg-card/90 p-4 shadow-sm"
     >
       <p class="mb-2 text-[0.65rem] font-bold tracking-[0.16em] text-primary uppercase">Question</p>
       <div class="prose prose-stone max-w-none text-sm dark:prose-invert">
         {@html renderMath(question)}
       </div>
+      {#if tool === "interact"}
+        <form
+          class="mt-4 flex flex-col gap-2 border-t border-border pt-3"
+          onsubmit={(event) => {
+            event.preventDefault();
+            submitSketchAnswer();
+          }}
+        >
+          {#if answerType === "number"}
+            <NumberAnswer bind:answer={sketchAnswer} />
+          {:else if answerType === "text"}
+            <TextAnswer bind:answer={sketchAnswer} />
+          {:else}
+            <ExpressionAnswer bind:answer={sketchAnswer} />
+          {/if}
+          <Button type="submit" size="sm" class="self-end" disabled={!canSubmitSketch}>Submit</Button>
+        </form>
+      {/if}
     </div>
   {/if}
   <div class="relative min-h-0 flex-1">
     <canvas
       bind:this={canvas}
-      class="absolute inset-0 h-full w-full touch-none {tool === 'interact' ? 'pointer-events-none' : ''}"
+      class="absolute inset-0 h-full w-full touch-none {pageInteraction ? 'pointer-events-none' : ''}"
       onpointerdown={onDown}
       onpointermove={onMove}
       onpointerup={onUp}
@@ -1395,17 +1452,19 @@
             >
               <StickyNote class="h-4 w-4" />
             </Button>
-            <Button
-              variant={view === "question" ? "default" : "ghost"}
-              size="icon"
-              class="size-8"
-              onclick={() => chooseView("question")}
-              aria-label="Question view"
-              aria-pressed={view === "question"}
-              title="Question view"
-            >
-              <FileQuestion class="h-4 w-4" />
-            </Button>
+            {#if canShowQuestion}
+              <Button
+                variant={view === "question" ? "default" : "ghost"}
+                size="icon"
+                class="size-8"
+                onclick={() => chooseView("question")}
+                aria-label="Question view"
+                aria-pressed={view === "question"}
+                title="Question view"
+              >
+                <FileQuestion class="h-4 w-4" />
+              </Button>
+            {/if}
           </div>
         {/if}
       </div>
