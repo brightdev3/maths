@@ -8,6 +8,11 @@
   import Undo from "@lucide/svelte/icons/undo";
   import Redo from "@lucide/svelte/icons/redo";
   import MousePointer2 from "@lucide/svelte/icons/mouse-pointer-2";
+  import Shapes from "@lucide/svelte/icons/shapes";
+  import Minus from "@lucide/svelte/icons/minus";
+  import Square from "@lucide/svelte/icons/square";
+  import Circle from "@lucide/svelte/icons/circle";
+  import Proportions from "@lucide/svelte/icons/proportions";
   import X from "@lucide/svelte/icons/x";
 
   let { open = true, onclose = () => {} }: { open?: boolean; onclose?: () => void } = $props();
@@ -25,6 +30,21 @@
     fontSize: number;
   };
   type EditorState = { id: string | null; x: number; y: number };
+  type ShapeKind = "line" | "rect" | "ellipse" | "circle";
+  type Shape = {
+    id: string;
+    kind: ShapeKind;
+    // line: (x, y) -> (x + w, y + h); rect/ellipse: bounding box;
+    // circle: x/y is the centre and w/h is the radius.
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    color: string;
+    width: number;
+  };
+  type ShapeHandle = "start" | "end" | "nw" | "ne" | "sw" | "se" | "center" | "radius";
+  type Tool = "pen" | "eraser" | "text" | "interact" | "shape";
 
   const MIN_W = 60;
   const MIN_H = 36;
@@ -33,14 +53,15 @@
   const HANDLE_R = 14;
 
   let canvas: HTMLCanvasElement | null = $state(null);
-  // Every line and textbox is stored individually so they can be
+  // Every stroke, textbox and shape is stored individually so they can be
   // erased, moved, resized and re-edited after the fact.
   let strokes: Stroke[] = $state([]);
   let boxes: TextBox[] = $state([]);
+  let shapes: Shape[] = $state([]);
   let nextId = 1;
 
-  type Scene = { strokes: Stroke[]; boxes: TextBox[] };
-  let history: Scene[] = $state([{ strokes: [], boxes: [] }]);
+  type Scene = { strokes: Stroke[]; boxes: TextBox[]; shapes: Shape[] };
+  let history: Scene[] = $state([{ strokes: [], boxes: [], shapes: [] }]);
   let historyIndex = $state(0);
 
   // structuredClone throws on $state proxies (DataCloneError), so scenes
@@ -50,7 +71,7 @@
   }
 
   function snapshot() {
-    history = [...history.slice(0, historyIndex + 1), cloneScene({ strokes, boxes })].slice(-50);
+    history = [...history.slice(0, historyIndex + 1), cloneScene({ strokes, boxes, shapes })].slice(-50);
     historyIndex = history.length - 1;
   }
 
@@ -61,6 +82,7 @@
     historyIndex = index;
     strokes = copy.strokes;
     boxes = copy.boxes;
+    shapes = copy.shapes;
     selectedId = null;
     hoverId = null;
     editor = null;
@@ -69,6 +91,9 @@
     drawing = false;
     moveDrag = null;
     resizeDrag = null;
+    shapeDraw = null;
+    shapeHandleDrag = null;
+    shapeMoveDrag = null;
     redraw();
   }
 
@@ -82,7 +107,10 @@
 
   let drawing = $state(false);
   let currentStroke: Stroke | null = null;
-  let tool: "pen" | "eraser" | "text" | "interact" = $state("pen");
+  let tool: Tool = $state("pen");
+  let shapeKind: ShapeKind = $state("line");
+  let shapesOpen = $state(false);
+  let regularShapes = $state(false);
   let color = $state("#171717");
   let colorTouched = false;
 
@@ -115,10 +143,14 @@
   let hoverId: string | null = $state(null);
   let moveDrag: { id: string; lastX: number; lastY: number } | null = null;
   let resizeDrag: { id: string; startW: number; startH: number; startX: number; startY: number } | null = null;
+  let shapeDraw: { id: string; startX: number; startY: number } | null = null;
+  let shapeHandleDrag: { id: string; handle: ShapeHandle } | null = null;
+  let shapeMoveDrag: { id: string; lastX: number; lastY: number } | null = null;
 
   const colors = ["#171717", "#ffffff", "#dc2626", "#2563eb", "#16a34a", "#9333ea", "#ea580c"];
 
   const selectedBox = $derived(boxes.find((b) => b.id === selectedId) ?? null);
+  const selectedShape = $derived(shapes.find((s) => s.id === selectedId) ?? null);
   const hoverBox = $derived(boxes.find((b) => b.id === hoverId) ?? null);
   const editorBox = $derived.by(() => {
     const ed = editor;
@@ -212,6 +244,31 @@
     return lines;
   }
 
+  function drawShape(ctx: CanvasRenderingContext2D, shape: Shape) {
+    ctx.beginPath();
+    ctx.strokeStyle = shape.color;
+    ctx.lineWidth = shape.width;
+    if (shape.kind === "line") {
+      ctx.moveTo(shape.x, shape.y);
+      ctx.lineTo(shape.x + shape.w, shape.y + shape.h);
+    } else if (shape.kind === "rect") {
+      ctx.rect(shape.x, shape.y, shape.w, shape.h);
+    } else if (shape.kind === "ellipse") {
+      ctx.ellipse(
+        shape.x + shape.w / 2,
+        shape.y + shape.h / 2,
+        Math.abs(shape.w) / 2,
+        Math.abs(shape.h) / 2,
+        0,
+        0,
+        Math.PI * 2
+      );
+    } else {
+      ctx.arc(shape.x, shape.y, Math.abs(shape.w), 0, Math.PI * 2);
+    }
+    ctx.stroke();
+  }
+
   function redraw() {
     const ctx = context();
     if (!ctx || !canvas) return;
@@ -238,6 +295,7 @@
         ctx.stroke();
       }
     }
+    for (const shape of shapes) drawShape(ctx, shape);
     ctx.textBaseline = "top";
     for (const box of boxes) {
       if (editor && editor.id === box.id) continue;
@@ -311,6 +369,66 @@
     return false;
   }
 
+  function shapeBox(shape: Shape) {
+    const x = Math.min(shape.x, shape.x + shape.w);
+    const y = Math.min(shape.y, shape.y + shape.h);
+    return { x, y, w: Math.abs(shape.w), h: Math.abs(shape.h) };
+  }
+
+  function shapeHit(shape: Shape, p: Point, tol = 6) {
+    const reach = tol + shape.width / 2;
+    if (shape.kind === "line") {
+      return distToSegment(p, { x: shape.x, y: shape.y }, { x: shape.x + shape.w, y: shape.y + shape.h }) <= reach;
+    }
+    if (shape.kind === "circle") {
+      return Math.abs(Math.hypot(p.x - shape.x, p.y - shape.y) - Math.abs(shape.w)) <= reach;
+    }
+    const box = shapeBox(shape);
+    if (shape.kind === "rect") {
+      const outer =
+        p.x >= box.x - reach && p.x <= box.x + box.w + reach && p.y >= box.y - reach && p.y <= box.y + box.h + reach;
+      const inner =
+        p.x > box.x + reach && p.x < box.x + box.w - reach && p.y > box.y + reach && p.y < box.y + box.h - reach;
+      return outer && !inner;
+    }
+    const rx = box.w / 2;
+    const ry = box.h / 2;
+    const cx = box.x + rx;
+    const cy = box.y + ry;
+    if (rx < 1 || ry < 1) return Math.hypot(p.x - cx, p.y - cy) <= reach;
+    const nx = (p.x - cx) / rx;
+    const ny = (p.y - cy) / ry;
+    const norm = Math.hypot(nx, ny);
+    if (norm === 0) return false;
+    return Math.hypot(p.x - (cx + (nx / norm) * rx), p.y - (cy + (ny / norm) * ry)) <= reach;
+  }
+
+  function shapeHandlePoints(shape: Shape): { key: ShapeHandle; x: number; y: number }[] {
+    if (shape.kind === "line") {
+      return [
+        { key: "start", x: shape.x, y: shape.y },
+        { key: "end", x: shape.x + shape.w, y: shape.y + shape.h }
+      ];
+    }
+    if (shape.kind === "circle") {
+      return [
+        { key: "center", x: shape.x, y: shape.y },
+        { key: "radius", x: shape.x + Math.abs(shape.w), y: shape.y }
+      ];
+    }
+    const box = shapeBox(shape);
+    return [
+      { key: "nw", x: box.x, y: box.y },
+      { key: "ne", x: box.x + box.w, y: box.y },
+      { key: "sw", x: box.x, y: box.y + box.h },
+      { key: "se", x: box.x + box.w, y: box.y + box.h }
+    ];
+  }
+
+  function shapeHandleAt(p: Point, shape: Shape) {
+    return shapeHandlePoints(shape).find((h) => Math.hypot(p.x - h.x, p.y - h.y) <= HANDLE_R)?.key ?? null;
+  }
+
   // Eraser disc radius. A stroke is erased when the disc touches it.
   function eraserRadius() {
     return lineWidth * 1.5;
@@ -320,10 +438,12 @@
     const radius = eraserRadius();
     const strokeHits = new Set(strokes.filter((s) => strokeHit(s, p, radius + s.width / 2)).map((s) => s.id));
     const boxHits = boxes.filter((b) => insideBox(p, b, radius)).map((b) => b.id);
-    if (strokeHits.size === 0 && boxHits.length === 0) return;
+    const shapeHits = new Set(shapes.filter((s) => shapeHit(s, p, radius)).map((s) => s.id));
+    if (strokeHits.size === 0 && boxHits.length === 0 && shapeHits.size === 0) return;
     strokes = strokes.filter((s) => !strokeHits.has(s.id));
     boxes = boxes.filter((b) => !boxHits.includes(b.id));
-    if (selectedId && boxHits.includes(selectedId)) selectedId = null;
+    shapes = shapes.filter((s) => !shapeHits.has(s.id));
+    if (selectedId && (boxHits.includes(selectedId) || shapeHits.has(selectedId))) selectedId = null;
     if (editor && editor.id && boxHits.includes(editor.id)) {
       editor = null;
       editorText = "";
@@ -429,13 +549,151 @@
     }
   }
 
-  function setTool(next: "pen" | "eraser" | "text" | "interact") {
+  function setTool(next: Exclude<Tool, "shape">) {
     // Switching tools always stamps pending text first, so an open
     // editor can never strand the pad. Stray blurs (dialogs, devtools)
     // intentionally leave the text alone.
     commitText();
     hoverId = null;
+    shapesOpen = false;
     tool = tool === next ? "pen" : next;
+  }
+
+  function chooseShape(kind: ShapeKind) {
+    commitText();
+    hoverId = null;
+    colorOpen = false;
+    shapeKind = kind;
+    tool = "shape";
+    shapesOpen = false;
+  }
+
+  function toggleShapes() {
+    commitText();
+    hoverId = null;
+    colorOpen = false;
+    if (shapesOpen) {
+      shapesOpen = false;
+    } else {
+      shapesOpen = true;
+      tool = "shape";
+    }
+  }
+
+  function lineEnd(startX: number, startY: number, endX: number, endY: number, constrain: boolean): Point {
+    if (!constrain) return { x: endX, y: endY };
+    const angle = Math.atan2(endY - startY, endX - startX);
+    const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+    const length = Math.hypot(endX - startX, endY - startY);
+    return { x: startX + Math.cos(snapped) * length, y: startY + Math.sin(snapped) * length };
+  }
+
+  function updateShapeDraw(shape: Shape, draw: { startX: number; startY: number }, p: Point, constrain: boolean) {
+    if (shape.kind === "line") {
+      const end = lineEnd(draw.startX, draw.startY, p.x, p.y, constrain);
+      shape.x = draw.startX;
+      shape.y = draw.startY;
+      shape.w = end.x - draw.startX;
+      shape.h = end.y - draw.startY;
+      return;
+    }
+    if (shape.kind === "circle") {
+      shape.x = draw.startX;
+      shape.y = draw.startY;
+      shape.w = Math.hypot(p.x - draw.startX, p.y - draw.startY);
+      shape.h = shape.w;
+      return;
+    }
+    let dx = p.x - draw.startX;
+    let dy = p.y - draw.startY;
+    if (constrain) {
+      const side = Math.max(Math.abs(dx), Math.abs(dy));
+      dx = Math.sign(dx || 1) * side;
+      dy = Math.sign(dy || 1) * side;
+    }
+    shape.x = Math.min(draw.startX, draw.startX + dx);
+    shape.y = Math.min(draw.startY, draw.startY + dy);
+    shape.w = Math.abs(dx);
+    shape.h = Math.abs(dy);
+  }
+
+  function updateShapeHandle(shape: Shape, handle: ShapeHandle, p: Point, constrain: boolean) {
+    if (shape.kind === "line") {
+      if (handle === "start") {
+        const endX = shape.x + shape.w;
+        const endY = shape.y + shape.h;
+        const start = lineEnd(endX, endY, p.x, p.y, constrain);
+        shape.x = start.x;
+        shape.y = start.y;
+        shape.w = endX - start.x;
+        shape.h = endY - start.y;
+      } else {
+        const end = lineEnd(shape.x, shape.y, p.x, p.y, constrain);
+        shape.w = end.x - shape.x;
+        shape.h = end.y - shape.y;
+      }
+      return;
+    }
+    if (shape.kind === "circle") {
+      if (handle === "center") {
+        shape.x = p.x;
+        shape.y = p.y;
+      } else {
+        shape.w = Math.hypot(p.x - shape.x, p.y - shape.y);
+        shape.h = shape.w;
+      }
+      return;
+    }
+    const box = shapeBox(shape);
+    let anchorX = box.x;
+    let anchorY = box.y;
+    if (handle === "nw") {
+      anchorX = box.x + box.w;
+      anchorY = box.y + box.h;
+    } else if (handle === "ne") {
+      anchorY = box.y + box.h;
+    } else if (handle === "sw") {
+      anchorX = box.x + box.w;
+    }
+    let dx = p.x - anchorX;
+    let dy = p.y - anchorY;
+    if (constrain) {
+      const side = Math.max(Math.abs(dx), Math.abs(dy));
+      dx = Math.sign(dx || 1) * side;
+      dy = Math.sign(dy || 1) * side;
+    }
+    shape.x = Math.min(anchorX, anchorX + dx);
+    shape.y = Math.min(anchorY, anchorY + dy);
+    shape.w = Math.abs(dx);
+    shape.h = Math.abs(dy);
+  }
+
+  function shapeDown(event: PointerEvent, p: Point) {
+    colorOpen = false;
+    shapesOpen = false;
+    commitText();
+    const selected = selectedShape;
+    if (selected) {
+      const handle = shapeHandleAt(p, selected);
+      if (handle) {
+        shapeHandleDrag = { id: selected.id, handle };
+        capturePointer(event.target, event.pointerId);
+        return;
+      }
+    }
+    const hit = [...shapes].reverse().find((s) => shapeHit(s, p));
+    if (hit) {
+      selectedId = hit.id;
+      shapeMoveDrag = { id: hit.id, lastX: p.x, lastY: p.y };
+      capturePointer(event.target, event.pointerId);
+      return;
+    }
+    selectedId = null;
+    const id = `sh-${Date.now().toString(36)}-${nextId++}`;
+    shapes.push({ id, kind: shapeKind, x: p.x, y: p.y, w: 0, h: 0, color, width: lineWidth });
+    shapeDraw = { id, startX: p.x, startY: p.y };
+    capturePointer(event.target, event.pointerId);
+    redraw();
   }
 
   function doneSketch() {
@@ -480,6 +738,7 @@
   function onDown(event: PointerEvent) {
     if (!canvas) return;
     colorOpen = false;
+    shapesOpen = false;
     const p = position(event);
     if (tool === "eraser") {
       commitText();
@@ -489,6 +748,10 @@
     }
     if (tool === "text") {
       textDown(event, p);
+      return;
+    }
+    if (tool === "shape") {
+      shapeDown(event, p);
       return;
     }
     commitText();
@@ -506,11 +769,41 @@
     if (event.buttons === 0) {
       // No button held: end any stale gesture (e.g. a pointerup missed
       // outside the canvas) and just track the eraser ring.
-      if (drawing || currentStroke || moveDrag || resizeDrag) onUp();
+      if (drawing || currentStroke || moveDrag || resizeDrag || shapeDraw || shapeHandleDrag || shapeMoveDrag) onUp();
       if (tool === "eraser") eraserPos = position(event);
       if (tool === "text") {
         const p = position(event);
         hoverId = [...boxes].reverse().find((b) => insideBox(p, b, 0))?.id ?? null;
+      }
+      return;
+    }
+    const shapeMove = shapeMoveDrag;
+    if (shapeMove) {
+      const shape = shapes.find((s) => s.id === shapeMove.id);
+      if (shape) {
+        const p = position(event);
+        shape.x += p.x - shapeMove.lastX;
+        shape.y += p.y - shapeMove.lastY;
+        shapeMove.lastX = p.x;
+        shapeMove.lastY = p.y;
+        redraw();
+      }
+      return;
+    }
+    const shapeHandle = shapeHandleDrag;
+    if (shapeHandle) {
+      const shape = shapes.find((s) => s.id === shapeHandle.id);
+      if (shape) {
+        updateShapeHandle(shape, shapeHandle.handle, position(event), regularShapes || event.shiftKey);
+        redraw();
+      }
+      return;
+    }
+    if (shapeDraw) {
+      const shape = shapes.find((s) => s.id === shapeDraw!.id);
+      if (shape) {
+        updateShapeDraw(shape, shapeDraw, position(event), regularShapes || event.shiftKey);
+        redraw();
       }
       return;
     }
@@ -619,12 +912,35 @@
     }
   });
 
+  function finishShape(id: string) {
+    const shape = shapes.find((s) => s.id === id);
+    if (!shape) return;
+    const span =
+      shape.kind === "line"
+        ? Math.hypot(shape.w, shape.h)
+        : shape.kind === "circle"
+          ? Math.abs(shape.w)
+          : Math.min(Math.abs(shape.w), Math.abs(shape.h));
+    if (span < 2) {
+      shapes = shapes.filter((s) => s.id !== id);
+      if (selectedId === id) selectedId = null;
+      return;
+    }
+    selectedId = id;
+  }
+
   function onUp() {
-    const finished = (drawing && currentStroke) || moveDrag || resizeDrag;
+    const shapeDrawn = shapeDraw;
+    if (shapeDrawn) finishShape(shapeDrawn.id);
+    const finished =
+      (drawing && currentStroke) || moveDrag || resizeDrag || shapeHandleDrag || shapeMoveDrag || shapeDrawn;
     drawing = false;
     currentStroke = null;
     moveDrag = null;
     resizeDrag = null;
+    shapeDraw = null;
+    shapeHandleDrag = null;
+    shapeMoveDrag = null;
     eraserPos = null;
     if (finished) snapshot();
   }
@@ -632,6 +948,7 @@
   function clearCanvas() {
     strokes = [];
     boxes = [];
+    shapes = [];
     selectedId = null;
     hoverId = null;
     editor = null;
@@ -677,6 +994,54 @@
           title="Drag to resize"
         ></div>
       </div>
+    {/if}
+    {#if selectedShape && tool === "shape"}
+      {@const shape = selectedShape}
+      {@const handles = shapeHandlePoints(shape)}
+      {#if shape.kind === "line"}
+        <svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+          <line
+            x1={shape.x}
+            y1={shape.y}
+            x2={shape.x + shape.w}
+            y2={shape.y + shape.h}
+            class="text-primary"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-dasharray="4 4"
+          />
+        </svg>
+      {:else if shape.kind === "circle"}
+        {@const radius = Math.abs(shape.w)}
+        <div
+          class="pointer-events-none absolute rounded-full border-2 border-dashed border-primary/60"
+          style="left: {shape.x - radius}px; top: {shape.y - radius}px; width: {radius * 2}px; height: {radius * 2}px;"
+        ></div>
+        <svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+          <line
+            x1={shape.x}
+            y1={shape.y}
+            x2={shape.x + radius}
+            y2={shape.y}
+            class="text-primary"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-dasharray="4 4"
+          />
+        </svg>
+      {:else}
+        {@const box = shapeBox(shape)}
+        <div
+          class="pointer-events-none absolute rounded-sm border-2 border-dashed border-primary"
+          style="left: {box.x}px; top: {box.y}px; width: {box.w}px; height: {box.h}px;"
+        ></div>
+      {/if}
+      {#each handles as handle (handle.key)}
+        <div
+          class="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-card shadow"
+          style="left: {handle.x}px; top: {handle.y}px;"
+        ></div>
+      {/each}
     {/if}
     {#if hoverBox && hoverBox.id !== selectedId && (tool === "text" || tool === "interact")}
       <div
@@ -759,7 +1124,10 @@
         aria-label="Pen colour, currently {color}"
         aria-haspopup="true"
         aria-expanded={colorOpen}
-        onclick={() => (colorOpen = !colorOpen)}
+        onclick={() => {
+          colorOpen = !colorOpen;
+          shapesOpen = false;
+        }}
       ></button>
       {#if colorOpen}
         <div
@@ -846,6 +1214,87 @@
     >
       <Type class="h-4 w-4" />
     </Button>
+    <div class="relative">
+      <Button
+        variant={tool === "shape" ? "default" : "ghost"}
+        size="icon"
+        class="size-8"
+        onclick={toggleShapes}
+        aria-label="Shapes"
+        aria-haspopup="true"
+        aria-expanded={shapesOpen}
+        title="Shapes"
+      >
+        <Shapes class="h-4 w-4" />
+      </Button>
+      {#if shapesOpen}
+        <div
+          class="absolute bottom-10 left-1/2 z-20 flex -translate-x-1/2 flex-col gap-1 rounded-xl border border-border bg-card p-2 shadow"
+          role="group"
+          aria-label="Shape tools"
+        >
+          <div class="flex items-center gap-1.5">
+            <Button
+              variant={tool === "shape" && shapeKind === "line" ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => chooseShape("line")}
+              aria-label="Line"
+              aria-pressed={tool === "shape" && shapeKind === "line"}
+              title="Line (drag between endpoints)"
+            >
+              <Minus class="h-4 w-4" />
+            </Button>
+            <Button
+              variant={tool === "shape" && shapeKind === "ellipse" ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => chooseShape("ellipse")}
+              aria-label="Ellipse"
+              aria-pressed={tool === "shape" && shapeKind === "ellipse"}
+              title="Ellipse (drag a box)"
+            >
+              <Circle class="h-4 w-4 scale-y-50" />
+            </Button>
+            <Button
+              variant={tool === "shape" && shapeKind === "rect" ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => chooseShape("rect")}
+              aria-label="Rectangle"
+              aria-pressed={tool === "shape" && shapeKind === "rect"}
+              title="Rectangle (drag a box)"
+            >
+              <Square class="h-4 w-4" />
+            </Button>
+            <Button
+              variant={tool === "shape" && shapeKind === "circle" ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => chooseShape("circle")}
+              aria-label="Circle"
+              aria-pressed={tool === "shape" && shapeKind === "circle"}
+              title="Circle (drag from the centre)"
+            >
+              <Circle class="h-4 w-4" />
+            </Button>
+          </div>
+          <div class="flex justify-center border-t border-border pt-1">
+            <Button
+              variant={regularShapes ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => (regularShapes = !regularShapes)}
+              aria-label="Regular shapes"
+              aria-pressed={regularShapes}
+              title="Regular shapes (or hold Shift)"
+            >
+              <Proportions class="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      {/if}
+    </div>
     <Button variant="ghost" size="icon" class="size-8" onclick={clearCanvas} aria-label="Clear" title="Clear">
       <Trash class="h-4 w-4" />
     </Button>
