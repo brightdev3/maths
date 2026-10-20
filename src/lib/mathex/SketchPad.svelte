@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
   import Eraser from "@lucide/svelte/icons/eraser";
   import Trash from "@lucide/svelte/icons/trash";
   import Type from "@lucide/svelte/icons/type";
@@ -721,7 +720,7 @@
     <div class="flex items-center gap-0.5">
       <button
         type="button"
-        class="flex h-8 w-8 items-center justify-center rounded-full transition-colors {tool === 'interact'
+        class="flex h-8 w-8 items-center justify-center rounded-[3px] transition-colors {tool === 'interact'
           ? 'bg-primary text-primary-foreground shadow'
           : 'text-muted-foreground hover:bg-muted'}"
         onclick={() => setTool("interact")}
@@ -802,8 +801,7 @@
         </div>
       {/if}
     </div>
-    <div class="flex items-center gap-1.5">
-      <Label for="sketch-width" class="text-xs text-muted-foreground">Size</Label>
+    <div class="flex items-center">
       <input
         id="sketch-width"
         type="range"
@@ -811,38 +809,55 @@
         max={16}
         step={1}
         bind:value={lineWidth}
+        aria-label="Pen size"
         class="h-1 w-16 accent-primary"
       />
     </div>
     <Button
-      variant={tool === "pen" ? "default" : "outline"}
-      size="sm"
+      variant={tool === "pen" ? "default" : "ghost"}
+      size="icon"
+      class="size-8"
       onclick={() => setTool("pen")}
+      aria-label="Pen"
       aria-pressed={tool === "pen"}
+      title="Pen"
     >
-      <Pen class="h-4 w-4" /> Pen
+      <Pen class="h-4 w-4" />
     </Button>
     <Button
-      variant={tool === "eraser" ? "default" : "outline"}
-      size="sm"
+      variant={tool === "eraser" ? "default" : "ghost"}
+      size="icon"
+      class="size-8"
       onclick={() => setTool("eraser")}
+      aria-label="Eraser"
       aria-pressed={tool === "eraser"}
+      title="Eraser"
     >
-      <Eraser class="h-4 w-4" /> Eraser
+      <Eraser class="h-4 w-4" />
     </Button>
     <Button
-      variant={tool === "text" ? "default" : "outline"}
-      size="sm"
+      variant={tool === "text" ? "default" : "ghost"}
+      size="icon"
+      class="size-8"
       onclick={() => setTool("text")}
+      aria-label="Text"
       aria-pressed={tool === "text"}
+      title="Text"
     >
-      <Type class="h-4 w-4" /> Text
+      <Type class="h-4 w-4" />
     </Button>
-    <Button variant="outline" size="sm" onclick={clearCanvas}>
-      <Trash class="h-4 w-4" /> Clear
+    <Button variant="ghost" size="icon" class="size-8" onclick={clearCanvas} aria-label="Clear" title="Clear">
+      <Trash class="h-4 w-4" />
     </Button>
-    <Button size="sm" onclick={doneSketch}>
-      <X class="h-4 w-4" /> Done
+    <Button
+      variant="destructive"
+      size="icon"
+      class="size-8 rounded-full"
+      onclick={doneSketch}
+      aria-label="Done"
+      title="Done"
+    >
+      <X class="h-4 w-4" />
     </Button>
   </div>
 </div>
