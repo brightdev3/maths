@@ -1168,6 +1168,16 @@
       aria-hidden="true"
     ></div>
   {/if}
+  {#if view === "question" && question}
+    <div
+      class="pointer-events-none absolute top-4 left-4 max-h-[45vh] w-[min(30rem,calc(100vw-2rem))] overflow-auto rounded-md border border-border bg-card/90 p-4 shadow-sm"
+    >
+      <p class="mb-2 text-[0.65rem] font-bold tracking-[0.16em] text-primary uppercase">Question</p>
+      <div class="prose prose-stone max-w-none text-sm dark:prose-invert">
+        {@html renderMath(question)}
+      </div>
+    </div>
+  {/if}
   <div class="relative min-h-0 flex-1">
     <canvas
       bind:this={canvas}
@@ -1178,16 +1188,6 @@
       onpointercancel={onUp}
       onlostpointercapture={onUp}
     ></canvas>
-    {#if view === "question" && question}
-      <div
-        class="pointer-events-auto absolute top-4 left-4 z-10 max-h-[45vh] w-[min(30rem,calc(100vw-2rem))] overflow-auto rounded-md border border-border bg-card/90 p-4 shadow-sm"
-      >
-        <p class="mb-2 text-[0.65rem] font-bold tracking-[0.16em] text-primary uppercase">Question</p>
-        <div class="prose prose-stone max-w-none text-sm dark:prose-invert">
-          {@html renderMath(question)}
-        </div>
-      </div>
-    {/if}
     {#if tool === "eraser" && eraserPos}
       {@const diameter = eraserRadius() * 2}
       <div
