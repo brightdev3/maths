@@ -174,7 +174,16 @@
   let moveDrag: { id: string; lastX: number; lastY: number } | null = null;
   let resizeDrag: { id: string; startW: number; startH: number; startX: number; startY: number } | null = null;
   let shapeDraw: { id: string; startX: number; startY: number } | null = null;
-  let shapeHandleDrag: { id: string; handle: ShapeHandle; anchorX: number; anchorY: number } | null = null;
+  let shapeHandleDrag: {
+    id: string;
+    handle: ShapeHandle;
+    anchorX: number;
+    anchorY: number;
+    startW: number;
+    startH: number;
+    dirX: number;
+    dirY: number;
+  } | null = null;
   let shapeMoveDrag: { id: string; lastX: number; lastY: number } | null = null;
 
   const colors = ["#171717", "#ffffff", "#dc2626", "#2563eb", "#16a34a", "#9333ea", "#ea580c"];
@@ -786,7 +795,11 @@
     p: Point,
     constrain: boolean,
     anchorX: number,
-    anchorY: number
+    anchorY: number,
+    startW: number,
+    startH: number,
+    dirX: number,
+    dirY: number
   ) {
     if (shape.kind === "polygon") {
       const points = shape.points ?? [];
@@ -842,15 +855,22 @@
     }
     let dx = p.x - anchorX;
     let dy = p.y - anchorY;
-    if (constrain) {
-      const side = Math.max(Math.abs(dx), Math.abs(dy));
-      dx = Math.sign(dx || 1) * side;
-      dy = Math.sign(dy || 1) * side;
+    if (constrain && startW > 0 && startH > 0) {
+      const scale = Math.max(Math.abs(dx) / startW, Math.abs(dy) / startH);
+      const width = Math.max(1, startW * scale);
+      const height = Math.max(1, startH * scale);
+      const xDir = Math.sign(dx) || dirX;
+      const yDir = Math.sign(dy) || dirY;
+      shape.w = width;
+      shape.h = height;
+      shape.x = xDir < 0 ? anchorX - width : anchorX;
+      shape.y = yDir < 0 ? anchorY - height : anchorY;
+    } else {
+      shape.x = Math.min(anchorX, anchorX + dx);
+      shape.y = Math.min(anchorY, anchorY + dy);
+      shape.w = Math.abs(dx);
+      shape.h = Math.abs(dy);
     }
-    shape.x = Math.min(anchorX, anchorX + dx);
-    shape.y = Math.min(anchorY, anchorY + dy);
-    shape.w = Math.abs(dx);
-    shape.h = Math.abs(dy);
   }
 
   function moveShapeDown(event: PointerEvent, p: Point) {
@@ -860,20 +880,39 @@
       if (handle) {
         let anchorX = 0;
         let anchorY = 0;
+        let startW = 0;
+        let startH = 0;
+        let dirX = 1;
+        let dirY = 1;
         if (selected.kind === "rect" || selected.kind === "ellipse") {
           const box = shapeBox(selected);
           anchorX = box.x;
           anchorY = box.y;
+          startW = box.w;
+          startH = box.h;
           if (handle === "nw") {
             anchorX = box.x + box.w;
             anchorY = box.y + box.h;
+            dirX = -1;
+            dirY = -1;
           } else if (handle === "ne") {
             anchorY = box.y + box.h;
+            dirY = -1;
           } else if (handle === "sw") {
             anchorX = box.x + box.w;
+            dirX = -1;
           }
         }
-        shapeHandleDrag = { id: selected.id, handle, anchorX, anchorY };
+        shapeHandleDrag = {
+          id: selected.id,
+          handle,
+          anchorX,
+          anchorY,
+          startW,
+          startH,
+          dirX,
+          dirY
+        };
         capturePointer(event.target, event.pointerId);
         return;
       }
@@ -1027,7 +1066,11 @@
           position(event),
           regularShapes || event.shiftKey,
           shapeHandle.anchorX,
-          shapeHandle.anchorY
+          shapeHandle.anchorY,
+          shapeHandle.startW,
+          shapeHandle.startH,
+          shapeHandle.dirX,
+          shapeHandle.dirY
         );
         redraw();
       }
