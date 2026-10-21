@@ -47,7 +47,14 @@ function renderMathInHtml(html: string): string {
 }
 
 export function renderMath(html: string): string {
-  return renderMathInHtml(DOMPurify.sanitize(html));
+  return renderMathInHtml(
+    DOMPurify.sanitize(html, {
+      // KaTeX MathML puts the fallback LaTeX in <annotation>. Dropping these
+      // elements turns that fallback into visible raw LaTeX.
+      ADD_TAGS: ["semantics", "annotation"],
+      ADD_ATTR: ["encoding"]
+    })
+  );
 }
 
 export function renderMathNoSanitize(html: string): string {

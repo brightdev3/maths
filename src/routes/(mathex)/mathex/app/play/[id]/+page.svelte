@@ -42,7 +42,6 @@
   import { Confetti } from "svelte-confetti";
   let confetti = $state(false);
 
-  import DOMPurify from "dompurify";
   import { renderMath } from "$lib/mathex/content";
 
   const roomId = page.params.id;
@@ -166,7 +165,7 @@
       answerFeedback = null;
       currentQuestion = {
         number: questionNumber,
-        content: DOMPurify.sanitize(content),
+        content,
         answerGroups,
         requireAllSolutionGroups,
         solutionOrderMatters,
