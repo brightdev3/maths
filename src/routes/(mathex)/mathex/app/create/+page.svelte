@@ -3,6 +3,7 @@
   import { Header } from "$lib/components/ui/header";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { toast } from "svelte-sonner";
@@ -15,6 +16,8 @@
   import Trophy from "@lucide/svelte/icons/trophy";
   import Upload from "@lucide/svelte/icons/upload";
   import FileJson from "@lucide/svelte/icons/file-json";
+  import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
+  import Link2 from "@lucide/svelte/icons/link-2";
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
 
   import {
@@ -32,11 +35,22 @@
   const socket: Socket<RoomCreateServerToClientEvents, RoomCreateClientToServerEvents> = io("/rooms");
   const ROOM_SET_KEY = "mathex-room-set";
 
+  type SetSource = "upload" | "paste" | "address" | "editor";
+  type SetAddressState =
+    | { status: "idle" }
+    | { status: "loading" }
+    | { status: "valid"; questions: z.infer<typeof Question>[] }
+    | { status: "error"; message: string };
+
+  let setSource = $state<SetSource>("upload");
   let file: File | undefined = $state(undefined);
   let fileValid = $state(false);
-  let questionCount = $state(0);
+  let fileQuestions: z.infer<typeof Question>[] | null = $state(null);
   let editorSet: z.infer<typeof Question>[] | undefined = $state(undefined);
-  let useEditorSet = $state(false);
+  let rawJson = $state("");
+  let setAddress = $state("");
+  let addressState = $state<SetAddressState>({ status: "idle" });
+  let addressRequestId = 0;
   let roomName = $state("");
   let creating = $state(false);
   let dragOver = $state(false);
@@ -88,27 +102,73 @@
     return z.array(Question).safeParse(source);
   }
 
+  function normalizeAddress(value: string): URL | null {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    let candidate = trimmed;
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)) {
+      candidate = candidate.startsWith("/") ? `${window.location.origin}${candidate}` : `https://${candidate}`;
+    }
+    try {
+      const url = new URL(candidate);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+      if (!/\.json$/i.test(url.pathname)) {
+        url.pathname = `${url.pathname.replace(/\/+$/, "")}.json`;
+      }
+      return url;
+    } catch {
+      return null;
+    }
+  }
+
+  async function loadFromAddress() {
+    const address = normalizeAddress(setAddress);
+    const requestId = ++addressRequestId;
+    if (!address) {
+      addressState = { status: "error", message: "Enter a valid web address" };
+      return;
+    }
+    addressState = { status: "loading" };
+    try {
+      const response = await fetch(address, { headers: { Accept: "application/json" } });
+      if (requestId !== addressRequestId) return;
+      if (!response.ok) {
+        addressState = { status: "error", message: `Could not load the set (${response.status})` };
+        return;
+      }
+      const parsed = parseQuestions(await response.json());
+      if (!parsed.success) {
+        addressState = { status: "error", message: "This address does not contain a valid question set" };
+        return;
+      }
+      addressState = { status: "valid", questions: parsed.data };
+    } catch {
+      if (requestId !== addressRequestId) return;
+      addressState = { status: "error", message: "Could not load a set from this address" };
+    }
+  }
+
   $effect(() => {
-    if (!file) {
+    const current = file;
+    if (!current) {
       fileValid = false;
-      questionCount = 0;
+      fileQuestions = null;
       return;
     }
     (async () => {
       try {
-        const text = await file!.text();
-        const parsed = JSON.parse(text);
+        const parsed = JSON.parse(await current.text());
         const result = parseQuestions(parsed);
         if (!result.success) {
           fileValid = false;
-          questionCount = 0;
+          fileQuestions = null;
           return;
         }
         fileValid = true;
-        questionCount = result.data.length;
+        fileQuestions = result.data;
       } catch {
         fileValid = false;
-        questionCount = 0;
+        fileQuestions = null;
       }
     })();
   });
@@ -118,9 +178,38 @@
       const result = parseQuestions(JSON.parse(localStorage.getItem(ROOM_SET_KEY) || "null"));
       if (result.success && result.data.length > 0) {
         editorSet = result.data;
-        useEditorSet = true;
+        setSource = "editor";
       }
     } catch {}
+  });
+
+  const pasteState = $derived.by(() => {
+    const text = rawJson.trim();
+    if (!text) return { status: "idle" as const };
+    try {
+      const result = parseQuestions(JSON.parse(text));
+      if (!result.success) {
+        return { status: "error" as const, message: result.error.issues[0]?.message || "Invalid question set" };
+      }
+      return { status: "valid" as const, questions: result.data };
+    } catch {
+      return { status: "error" as const, message: "Could not parse JSON" };
+    }
+  });
+
+  const selectedQuestions: z.infer<typeof Question>[] | null = $derived.by(() => {
+    switch (setSource) {
+      case "editor":
+        return editorSet ?? null;
+      case "upload":
+        return fileQuestions;
+      case "paste":
+        return pasteState.status === "valid" ? pasteState.questions : null;
+      case "address":
+        return addressState.status === "valid" ? addressState.questions : null;
+      default:
+        return null;
+    }
   });
 
   let roomNameValid = $state(true);
@@ -133,9 +222,7 @@
     roomNameValid = result.success;
   });
 
-  const canCreate = $derived(
-    (fileValid || (useEditorSet && editorSet !== undefined)) && roomNameValid && roomName.length >= 3 && !creating
-  );
+  const canCreate = $derived(selectedQuestions !== null && roomNameValid && roomName.length >= 3 && !creating);
 
   function handleFileDrop(e: DragEvent) {
     e.preventDefault();
@@ -143,14 +230,16 @@
     const dropped = e.dataTransfer?.files?.[0];
     if (dropped && (dropped.type === "application/json" || dropped.name.endsWith(".json"))) {
       file = dropped;
+      setSource = "upload";
     } else {
       toast.error("Please drop a .json file");
     }
   }
 
   async function createRoom() {
-    if (!fileValid && (!useEditorSet || !editorSet)) {
-      toast.error("Upload a valid question set file");
+    const set = selectedQuestions;
+    if (!set) {
+      toast.error("Choose a valid question set");
       return;
     }
     let roomNameResult = await RoomName.safeParseAsync(roomName);
@@ -160,10 +249,6 @@
     }
     creating = true;
     try {
-      const parsed = useEditorSet && editorSet ? editorSet : JSON.parse(await file!.text());
-      const result = parseQuestions(parsed);
-      if (!result.success) throw new Error("Invalid question set");
-      const set = result.data;
       const settings: RoomSettings = {
         ...DEFAULT_ROOM_SETTINGS,
         gameTimerMs: gameTimerMinutes > 0 ? Math.round(gameTimerMinutes * 60000) : null,
@@ -232,7 +317,9 @@
         <div class="mt-8 space-y-4 border-l border-border/70 pl-4 text-sm">
           <div>
             <p class="font-semibold">1. Select questions</p>
-            <p class="mt-0.5 text-muted-foreground">Upload JSON or use your saved editor set.</p>
+            <p class="mt-0.5 text-muted-foreground">
+              Upload JSON, paste a set, load it from an address, or use your editor set.
+            </p>
           </div>
           <div>
             <p class="font-semibold">2. Set the pace</p>
@@ -262,56 +349,168 @@
           >
             <div class="space-y-2">
               <Label class="font-semibold">Question set</Label>
-              {#if editorSet}
+              <div class="grid grid-cols-2 gap-2 {editorSet ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}">
                 <button
                   type="button"
-                  class="mb-2 flex w-full items-center justify-between rounded-xl border p-3.5 text-left transition-colors {useEditorSet
+                  class="flex items-center justify-center gap-2 rounded-[3px] border p-2.5 text-sm font-medium transition-colors {setSource ===
+                  'upload'
                     ? 'border-primary bg-primary/5'
                     : 'border-border hover:border-primary/50'}"
-                  onclick={() => (useEditorSet = true)}
+                  onclick={() => (setSource = "upload")}
                 >
-                  <span class="text-sm font-medium">Use set from editor</span>
-                  <span class="text-xs text-muted-foreground">
-                    {editorSet.length} question{editorSet.length === 1 ? "" : "s"}
-                  </span>
+                  <Upload class="h-4 w-4" /> File
                 </button>
-              {/if}
-              <button
-                class="flex w-full flex-col items-center gap-2 border-2 border-dashed p-6 text-center transition-colors {dragOver
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-primary/50'} {file && !fileValid ? 'border-destructive' : ''} {file &&
-                !useEditorSet
-                  ? 'border-primary bg-primary/5'
-                  : ''}"
-                onclick={() => {
-                  const input = document.createElement("input");
-                  input.type = "file";
-                  input.accept = ".json,application/json";
-                  input.onchange = () => {
-                    file = input.files?.[0];
-                    useEditorSet = false;
-                  };
-                  input.click();
-                }}
-                type="button"
-              >
-                {#if file}
-                  <FileJson class="h-8 w-8 text-primary" />
-                  <span class="text-sm font-medium">{file.name}</span>
-                  {#if fileValid}
-                    <span class="text-xs text-secondary">
-                      {questionCount} question{questionCount === 1 ? "" : "s"}
-                    </span>
-                  {:else}
-                    <span class="text-xs text-destructive">Invalid format</span>
-                  {/if}
-                {:else}
-                  <Upload class="h-8 w-8 text-muted-foreground" />
-                  <span class="text-sm text-muted-foreground">
-                    {dragOver ? "Drop here" : "Click or drag a JSON file"}
-                  </span>
+                <button
+                  type="button"
+                  class="flex items-center justify-center gap-2 rounded-[3px] border p-2.5 text-sm font-medium transition-colors {setSource ===
+                  'paste'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50'}"
+                  onclick={() => (setSource = "paste")}
+                >
+                  <ClipboardPaste class="h-4 w-4" /> Paste JSON
+                </button>
+                <button
+                  type="button"
+                  class="flex items-center justify-center gap-2 rounded-[3px] border p-2.5 text-sm font-medium transition-colors {setSource ===
+                  'address'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50'}"
+                  onclick={() => (setSource = "address")}
+                >
+                  <Link2 class="h-4 w-4" /> Address
+                </button>
+                {#if editorSet}
+                  <button
+                    type="button"
+                    class="flex items-center justify-center gap-2 rounded-[3px] border p-2.5 text-sm font-medium transition-colors {setSource ===
+                    'editor'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/50'}"
+                    onclick={() => (setSource = "editor")}
+                  >
+                    <FileJson class="h-4 w-4" /> Editor
+                  </button>
                 {/if}
-              </button>
+              </div>
+
+              {#if setSource === "upload"}
+                <button
+                  class="flex w-full flex-col items-center gap-2 border-2 border-dashed p-6 text-center transition-colors {dragOver
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50'} {file && !fileValid ? 'border-destructive' : ''} {file
+                    ? 'border-primary bg-primary/5'
+                    : ''}"
+                  onclick={() => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = ".json,application/json";
+                    input.onchange = () => {
+                      file = input.files?.[0];
+                    };
+                    input.click();
+                  }}
+                  type="button"
+                >
+                  {#if file}
+                    <FileJson class="h-8 w-8 text-primary" />
+                    <span class="text-sm font-medium">{file.name}</span>
+                    {#if fileValid}
+                      <span class="text-xs text-secondary">
+                        {fileQuestions?.length ?? 0} question{(fileQuestions?.length ?? 0) === 1 ? "" : "s"}
+                      </span>
+                    {:else}
+                      <span class="text-xs text-destructive">Invalid format</span>
+                    {/if}
+                  {:else}
+                    <Upload class="h-8 w-8 text-muted-foreground" />
+                    <span class="text-sm text-muted-foreground">
+                      {dragOver ? "Drop here" : "Click or drag a JSON file"}
+                    </span>
+                  {/if}
+                </button>
+              {:else if setSource === "paste"}
+                <Textarea
+                  bind:value={rawJson}
+                  rows={8}
+                  spellcheck={false}
+                  class="min-h-40 font-mono text-xs"
+                  placeholder={'{\n  "questions": [\n    { "contents": "…", "solutions": [] }\n  ]\n}'}
+                />
+                <div class="text-xs">
+                  {#if pasteState.status === "valid"}
+                    <span class="text-secondary">
+                      {pasteState.questions.length} question{pasteState.questions.length === 1 ? "" : "s"}
+                    </span>
+                  {:else if pasteState.status === "error"}
+                    <span class="text-destructive">{pasteState.message}</span>
+                  {:else}
+                    <span class="text-muted-foreground">Paste a Mathex set, or a raw array of questions.</span>
+                  {/if}
+                </div>
+              {:else if setSource === "address"}
+                <div class="flex gap-2">
+                  <div class="relative min-w-0 flex-1">
+                    <Link2
+                      class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                      bind:value={setAddress}
+                      placeholder="https://example.com/mathex-set"
+                      class="pl-9"
+                      spellcheck={false}
+                      oninput={() => {
+                        addressState = { status: "idle" };
+                        addressRequestId++;
+                      }}
+                      onkeydown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          loadFromAddress();
+                        }
+                      }}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onclick={loadFromAddress}
+                    disabled={!setAddress.trim() || addressState.status === "loading"}
+                  >
+                    {addressState.status === "loading" ? "Loading…" : "Load"}
+                  </Button>
+                </div>
+                <div class="text-xs">
+                  {#if addressState.status === "loading"}
+                    <span class="text-muted-foreground">Loading set…</span>
+                  {:else if addressState.status === "valid"}
+                    <span class="text-secondary">
+                      {addressState.questions.length} question{addressState.questions.length === 1 ? "" : "s"}
+                    </span>
+                  {:else if addressState.status === "error"}
+                    <span class="text-destructive">{addressState.message}</span>
+                  {:else}
+                    <span class="text-muted-foreground">
+                      Address of a JSON set. <code>.json</code> is appended if it is missing.
+                    </span>
+                  {/if}
+                </div>
+              {:else}
+                <div
+                  class="flex items-center justify-between gap-3 rounded-[3px] border border-primary bg-primary/5 p-3.5"
+                >
+                  <div class="flex items-center gap-2.5">
+                    <FileJson class="h-5 w-5 text-primary" />
+                    <div>
+                      <p class="text-sm font-medium">Set from the editor</p>
+                      <p class="text-xs text-muted-foreground">
+                        {editorSet?.length ?? 0} question{(editorSet?.length ?? 0) === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  </div>
+                  <Button href="/mathex/app/create/editor" variant="outline" size="sm" class="shrink-0">Edit</Button>
+                </div>
+              {/if}
             </div>
 
             <div class="space-y-2">

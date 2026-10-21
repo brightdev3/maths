@@ -25,6 +25,7 @@
     Check,
     ChevronDown,
     CircleUserRound,
+    ClipboardPaste,
     Copy,
     Download,
     FileJson,
@@ -102,6 +103,8 @@
   let localSaved = $state(true);
   let goLiveOpen = $state(false);
   let goLiveName = $state("");
+  let pasteOpen = $state(false);
+  let pasteJson = $state("");
   let creating = $state(false);
   let detailsOpen = $state(false);
   let exportOpen = $state(false);
@@ -802,6 +805,16 @@
     });
   }
 
+  function applyImportedSet(parsed: unknown) {
+    const source = (Array.isArray(parsed) ? { questions: parsed } : parsed) as any;
+    if (!source || !Array.isArray(source.questions) || source.questions.length > 100) throw new Error();
+    setName = typeof source.name === "string" ? source.name.slice(0, 120) : "";
+    instructions = typeof source.instructions === "string" ? source.instructions : "";
+    questions = source.questions.map((question: any) => withId(normalizeQuestion(question)));
+    pdfOptions = { ...defaultPdfOptions(), ...(source.pdfOptions || {}) };
+    currentQuestionId = questions[0]?.id || null;
+  }
+
   function importFile() {
     const input = document.createElement("input");
     input.type = "file";
@@ -810,20 +823,24 @@
       const file = input.files?.[0];
       if (!file) return;
       try {
-        const parsed = JSON.parse(await file.text());
-        const source = Array.isArray(parsed) ? { questions: parsed } : parsed;
-        if (!Array.isArray(source.questions) || source.questions.length > 100) throw new Error();
-        setName = typeof source.name === "string" ? source.name.slice(0, 120) : "";
-        instructions = typeof source.instructions === "string" ? source.instructions : "";
-        questions = source.questions.map((question: any) => withId(normalizeQuestion(question)));
-        pdfOptions = { ...defaultPdfOptions(), ...(source.pdfOptions || {}) };
-        currentQuestionId = questions[0]?.id || null;
+        applyImportedSet(JSON.parse(await file.text()));
         toast.success(`Imported ${questions.length} questions`);
       } catch {
         toast.error("Could not import this set");
       }
     };
     input.click();
+  }
+
+  function importPasted() {
+    try {
+      applyImportedSet(JSON.parse(pasteJson));
+      toast.success(`Imported ${questions.length} questions`);
+      pasteOpen = false;
+      pasteJson = "";
+    } catch {
+      toast.error("Could not parse this JSON set");
+    }
   }
 
   async function downloadJson() {
@@ -1016,6 +1033,9 @@
             ></button>
             <div class="absolute right-0 z-40 mt-2 w-60 rounded-xl border bg-popover p-1.5 text-sm">
               {#if !sessionToken}<button class="menu-item" onclick={importFile}><Upload /> Import JSON</button>{/if}
+              {#if !sessionToken}<button class="menu-item" onclick={() => (pasteOpen = true)}
+                  ><ClipboardPaste /> Paste JSON</button
+                >{/if}
               <button class="menu-item" onclick={downloadJson}><FileJson /> Download JSON</button>
               <button class="menu-item" onclick={() => exportPdf(false)}><Download /> Question PDF</button>
               <button class="menu-item" onclick={() => exportPdf(true)}><Download /> Answer PDF</button>
@@ -1379,6 +1399,39 @@
       <div class="mt-6 flex justify-end gap-2">
         <Button variant="outline" onclick={() => (pendingDeleteQuestion = null)}>Cancel</Button>
         <Button variant="destructive" onclick={confirmDeleteQuestion}>Delete question</Button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if pasteOpen}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
+    role="presentation"
+    onclick={(event) => event.target === event.currentTarget && (pasteOpen = false)}
+  >
+    <div class="w-full max-w-2xl border bg-background p-6">
+      <div class="mb-5 flex items-start justify-between">
+        <div class="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <ClipboardPaste />
+        </div>
+        <button class="rounded-lg p-2 hover:bg-accent" onclick={() => (pasteOpen = false)}><X class="size-4" /></button>
+      </div>
+      <h2 class="text-xl font-semibold">Paste set JSON</h2>
+      <p class="mt-2 text-sm leading-6 text-muted-foreground">
+        Paste a Mathex set or a raw array of questions. This replaces the current set in the editor.
+      </p>
+      <textarea
+        class="mt-4 h-64 w-full resize-y rounded-lg border bg-background p-3 font-mono text-xs outline-none ring-ring/20 focus:border-ring focus:ring-2"
+        bind:value={pasteJson}
+        spellcheck={false}
+        placeholder={'{\n  "name": "My set",\n  "questions": [\n    { "contents": "…", "solutions": [] }\n  ]\n}'}
+      ></textarea>
+      <div class="mt-6 flex justify-end gap-2">
+        <Button variant="outline" onclick={() => (pasteOpen = false)}>Cancel</Button>
+        <Button class="gap-2 bg-primary hover:bg-primary/90" onclick={importPasted} disabled={!pasteJson.trim()}
+          ><ClipboardPaste /> Import set</Button
+        >
       </div>
     </div>
   </div>
