@@ -488,6 +488,10 @@ export const createWSServer = (base: ServerInstance) => {
       if (!currentQuestion.skippable) return;
 
       socket.data.skips++;
+      socket.data.isRunning = true;
+      socket.data.runningUntil = Date.now() + room.runningTimeMs;
+      socket.emit("running", room.runningTimeMs);
+      socket.emit("alert", "info", "Question skipped");
 
       const skipLog: LogEntry = {
         timestamp: Date.now(),
@@ -499,38 +503,44 @@ export const createWSServer = (base: ServerInstance) => {
       saveRoom(room);
       roomManageNamespace.emit("log", skipLog);
 
-      if (socket.data.currentQuestion >= room.questions.length) {
-        socket.data.finishingTime = Date.now();
-        socket.emit("gameFinish");
+      // Keep the same thinking-time delay as a submitted answer, so skipping
+      // cannot be used to rush through questions.
+      setTimeout(() => {
+        if (socket.data.currentQuestion >= room.questions.length) {
+          socket.data.finishingTime = Date.now();
+          socket.emit("gameFinish");
+          roomManageNamespace.emit("alert", "info", `${socket.data.name} has finished (skipped last question)`);
+          const finishLog: LogEntry = {
+            timestamp: Date.now(),
+            playerName: socket.data.name || "Unknown",
+            type: "finished",
+            questionNumber: socket.data.currentQuestion
+          };
+          room.logs.push(finishLog);
+          saveRoom(room);
+          roomManageNamespace.emit("log", finishLog);
+          roomManageNamespace.emit("leaderboard", buildLeaderboard(room));
+        } else {
+          socket.data.currentQuestion++;
+          saveRoom(room);
+          const nextQuestion = room.questions[socket.data.currentQuestion - 1];
+          socket.emit(
+            "newQuestion",
+            nextQuestion.contents,
+            answerGroups(nextQuestion),
+            nextQuestion.requireAllSolutionGroups,
+            nextQuestion.solutionOrderMatters,
+            socket.data.currentQuestion,
+            nextQuestion.skippable
+          );
+        }
+        socket.emit("stopRunning");
+        socket.data.isRunning = false;
+        socket.data.runningUntil = null;
+        saveRoom(room);
+        io.of(`/manage-${room.id}`).emit("playerData", getPlayers(room));
         socket.nsp.emit("leaderboard", buildLeaderboard(room));
-        roomManageNamespace.emit("alert", "info", `${socket.data.name} has finished (skipped last question)`);
-        const finishLog: LogEntry = {
-          timestamp: Date.now(),
-          playerName: socket.data.name,
-          type: "finished",
-          questionNumber: socket.data.currentQuestion
-        };
-        room.logs.push(finishLog);
-        saveRoom(room);
-        roomManageNamespace.emit("log", finishLog);
-        roomManageNamespace.emit("leaderboard", buildLeaderboard(room));
-      } else {
-        socket.data.currentQuestion++;
-        saveRoom(room);
-        socket.emit("alert", "info", "Question skipped");
-        const nextQuestion = room.questions[socket.data.currentQuestion - 1];
-        socket.emit(
-          "newQuestion",
-          nextQuestion.contents,
-          answerGroups(nextQuestion),
-          nextQuestion.requireAllSolutionGroups,
-          nextQuestion.solutionOrderMatters,
-          socket.data.currentQuestion,
-          nextQuestion.skippable
-        );
-      }
-      io.of(`/manage-${room.id}`).emit("playerData", getPlayers(room));
-      socket.nsp.emit("leaderboard", buildLeaderboard(room));
+      }, room.runningTimeMs);
     });
     socket.on("sendChat", (text) => {
       if (!socket.data.name || !room.settings.allowChat) return;

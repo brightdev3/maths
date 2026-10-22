@@ -156,6 +156,7 @@
     setTimeout(() => (confetti = false), 6000);
   });
   let skipConfirmOpen = $state(false);
+  let skipping = $state(false);
 
   socket.on(
     "newQuestion",
@@ -163,6 +164,7 @@
       answer = null;
       answers = answerGroups.map(() => null);
       answerFeedback = null;
+      skipping = false;
       currentQuestion = {
         number: questionNumber,
         content,
@@ -285,6 +287,7 @@
   }
 
   function submitAnswer() {
+    skipping = false;
     const submittedAnswer = currentQuestion.requireAllSolutionGroups ? answers : answer;
     if (
       (Array.isArray(submittedAnswer) && submittedAnswer.some((value) => value === null || value === "")) ||
@@ -304,6 +307,8 @@
 
   function executeSkip() {
     skipConfirmOpen = false;
+    answerFeedback = null;
+    skipping = true;
     socket.emit("skip");
   }
 </script>
@@ -499,7 +504,15 @@
         <div class="min-w-0">
           {#if running}
             <div class="mathex-panel p-7 text-center sm:p-9">
-              {#if answerFeedback === "correct"}
+              {#if skipping}
+                <p class="mathex-kicker">Question skipped</p>
+                <Header size="h3" class="mt-1">Moving on.</Header>
+                <p class="mt-2 text-sm text-muted-foreground">Your next question will appear shortly.</p>
+                <div class="mt-4 flex items-center gap-3">
+                  <LoaderCircle class="h-5 w-5 animate-spin text-primary" />
+                  <Progress value={runningVisible} class="*:transition-none" />
+                </div>
+              {:else if answerFeedback === "correct"}
                 <div class="mx-auto flex h-16 w-16 items-center justify-center bg-secondary/10 text-secondary">
                   <CircleCheckBig class="h-9 w-9" />
                 </div>
