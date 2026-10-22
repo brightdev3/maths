@@ -87,6 +87,20 @@
     } catch {}
   }
 
+  function saveReconnectToken(code: string, token: string) {
+    try {
+      localStorage.setItem(`game24-reconnect-${code}`, token);
+    } catch {}
+  }
+
+  function reconnectTokenFor(code: string): string | undefined {
+    try {
+      return localStorage.getItem(`game24-reconnect-${code}`) || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   function requireName(): string | null {
     const clean = name.trim();
     if (!clean) {
@@ -124,6 +138,7 @@
           return;
         }
         persistName(clean);
+        saveReconnectToken(res.code, res.reconnectToken);
         goto(`/tools/24-game/online/room?id=${res.code}`);
       }
     );
@@ -133,20 +148,31 @@
     const clean = requireName();
     if (!clean) return;
     joiningCode = room.code;
-    socket.emit("joinRoom", { code: room.code, playerId, playerName: clean, password: pw }, (res) => {
-      joiningCode = null;
-      if (!res.ok) {
-        if (/password/i.test(res.error)) {
-          passwordFor = room;
-          password = "";
+    socket.emit(
+      "joinRoom",
+      {
+        code: room.code,
+        playerId,
+        playerName: clean,
+        password: pw,
+        reconnectToken: reconnectTokenFor(room.code)
+      },
+      (res) => {
+        joiningCode = null;
+        if (!res.ok) {
+          if (/password/i.test(res.error)) {
+            passwordFor = room;
+            password = "";
+            return;
+          }
+          toast.error(res.error);
           return;
         }
-        toast.error(res.error);
-        return;
+        persistName(clean);
+        saveReconnectToken(res.code, res.reconnectToken);
+        goto(`/tools/24-game/online/room?id=${res.code}`);
       }
-      persistName(clean);
-      goto(`/tools/24-game/online/room?id=${res.code}`);
-    });
+    );
   }
 
   function requestJoin(room: Game24RoomSummary) {

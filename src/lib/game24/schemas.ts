@@ -47,7 +47,9 @@ export const JoinGame24RoomInput = z.object({
   code: Game24Code,
   playerId: PlayerId,
   playerName: PlayerName,
-  password: z.string().max(60).optional()
+  password: z.string().max(60).optional(),
+  /** Required when reconnecting to an existing player. */
+  reconnectToken: z.string().max(128).optional()
 });
 export type JoinGame24RoomInput = z.infer<typeof JoinGame24RoomInput>;
 
@@ -67,7 +69,10 @@ export type ConfigureGame24RoomInput = z.infer<typeof ConfigureGame24RoomInput>;
 
 export const FractionSchema = z.object({
   n: z.number().int(),
-  d: z.number().int().refine((value) => value !== 0, "Denominator cannot be zero")
+  d: z
+    .number()
+    .int()
+    .refine((value) => value !== 0, "Denominator cannot be zero")
 });
 
 export const MoveSchema = z.object({
@@ -80,12 +85,16 @@ export const SubmitSolutionInput = z.object({
   round: z.number().int().min(1).max(50),
   moves: z.array(MoveSchema).min(1).max(10),
   expression: z.string().max(500).default(""),
-  elapsedMs: z.number().min(0).max(30 * 60 * 1_000).default(0)
+  elapsedMs: z
+    .number()
+    .min(0)
+    .max(30 * 60 * 1_000)
+    .default(0)
 });
 export type SubmitSolutionInput = z.infer<typeof SubmitSolutionInput>;
 
 export type Game24OperationResult = { ok: true } | { ok: false; error: string };
-export type Game24JoinResult = { ok: true; code: string } | { ok: false; error: string };
+export type Game24JoinResult = { ok: true; code: string; reconnectToken: string } | { ok: false; error: string };
 
 // ---------------------------------------------------------------------------
 // Room model (server side)
@@ -95,6 +104,8 @@ export type Game24RoomState = "lobby" | "playing" | "finished";
 
 export interface Game24Player {
   id: string;
+  /** Private credential used only to reclaim this player after a reconnect. */
+  reconnectToken: string;
   name: string;
   connected: boolean;
   /** Cumulative time in time mode, including a penalty for unsolved rounds. */

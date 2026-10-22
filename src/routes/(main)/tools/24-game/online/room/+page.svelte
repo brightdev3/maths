@@ -131,25 +131,50 @@
     } catch {}
   }
 
+  function saveReconnectToken(token: string) {
+    try {
+      localStorage.setItem(`game24-reconnect-${id}`, token);
+    } catch {}
+  }
+
+  function reconnectTokenFor(): string | undefined {
+    try {
+      return localStorage.getItem(`game24-reconnect-${id}`) || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   function tryJoin() {
     const clean = name.trim();
     if (!id || !clean) {
       gateVisible = true;
       return;
     }
-    socket.emit("joinRoom", { code: id, playerId, playerName: clean, password: password || undefined }, (res) => {
-      if (res.ok) {
-        inRoom = true;
-        gateVisible = false;
-        joinError = "";
-        needPassword = false;
-        persistName(clean);
-      } else {
-        gateVisible = true;
-        joinError = res.error;
-        needPassword = /password/i.test(res.error);
+    socket.emit(
+      "joinRoom",
+      {
+        code: id,
+        playerId,
+        playerName: clean,
+        password: password || undefined,
+        reconnectToken: reconnectTokenFor()
+      },
+      (res) => {
+        if (res.ok) {
+          inRoom = true;
+          gateVisible = false;
+          joinError = "";
+          needPassword = false;
+          persistName(clean);
+          saveReconnectToken(res.reconnectToken);
+        } else {
+          gateVisible = true;
+          joinError = res.error;
+          needPassword = /password/i.test(res.error);
+        }
       }
-    });
+    );
   }
 
   function submitGate() {

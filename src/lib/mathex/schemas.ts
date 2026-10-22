@@ -56,6 +56,8 @@ export interface RoomSocketData {
   finishingTime: number | null;
   isRunning: boolean;
   runningUntil: number | null;
+  /** Identifies the in-flight submission so a rejoin cannot apply its result elsewhere. */
+  pendingSubmission?: string | null;
   awaySince: number | null;
   visibilityFlags: number;
   skips: number;
@@ -153,15 +155,18 @@ export type SolutionType = z.infer<typeof SolutionItem>["type"];
 export const Question = z.preprocess(
   (val) => {
     if (val && typeof val === "object" && "type" in val && "data" in val) {
-      const q = val as any;
+      const data = (val as any).data;
+      // A legacy envelope with a null or non-object body must fall through to
+      // the object schema instead of throwing while the preprocess runs.
+      if (!data || typeof data !== "object") return val;
       return {
-        contents: q.data.contents || "",
-        solutions: q.data.solutions || [],
-        allowEquivalent: q.data.allowEquivalent ?? true,
-        answerComment: q.data.answerComment || "",
-        requireAllSolutionGroups: q.data.requireAllSolutionGroups ?? false,
-        solutionOrderMatters: q.data.solutionOrderMatters ?? false,
-        skippable: q.data.skippable ?? true
+        contents: data.contents || "",
+        solutions: data.solutions || [],
+        allowEquivalent: data.allowEquivalent ?? true,
+        answerComment: data.answerComment || "",
+        requireAllSolutionGroups: data.requireAllSolutionGroups ?? false,
+        solutionOrderMatters: data.solutionOrderMatters ?? false,
+        skippable: data.skippable ?? true
       };
     }
     return val;

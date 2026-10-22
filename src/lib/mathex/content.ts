@@ -8,13 +8,22 @@ export function parseStoredMath(value: string) {
   return { latex: match ? match[2] : value, scale: match ? Number(match[1]) : 1 };
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function renderKatex(value: string): string {
   const { latex, scale } = parseStoredMath(value);
   try {
     const math = renderToString(latex, { output: "mathml", throwOnError: false });
     return scale === 1 ? math : `<span style="font-size:${scale}em">${math}</span>`;
   } catch {
-    return `<code class="text-destructive">${latex}</code>`;
+    return `<code class="text-destructive">${escapeHtml(latex)}</code>`;
   }
 }
 
@@ -24,6 +33,14 @@ function renderMathInHtml(html: string): string {
   }
   const container = document.createElement("div");
   container.innerHTML = html;
+  // Keep the equation-size wrapper, drop every other inline style. CSS in
+  // question content must not be able to reposition or hide the player UI.
+  for (const element of container.querySelectorAll<HTMLElement>("[style]")) {
+    const style = (element.getAttribute("style") || "").trim();
+    if (!/^font-size:\s*(?:0\.5|0\.75|1|1\.25|1\.5|1\.75|2\.5)em;?$/.test(style)) {
+      element.removeAttribute("style");
+    }
+  }
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
   const textNodes: Text[] = [];
   while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
@@ -52,7 +69,8 @@ export function renderMath(html: string): string {
       // KaTeX MathML puts the fallback LaTeX in <annotation>. Dropping these
       // elements turns that fallback into visible raw LaTeX.
       ADD_TAGS: ["semantics", "annotation"],
-      ADD_ATTR: ["encoding"]
+      ADD_ATTR: ["encoding"],
+      FORBID_TAGS: ["style"]
     })
   );
 }

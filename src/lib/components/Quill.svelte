@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { renderToString } from "katex";
+  import DOMPurify from "dompurify";
   import MathField from "$lib/components/MathField.svelte";
 
   interface Props {
@@ -38,7 +39,13 @@
 
   function prepareMathHtml(sourceHtml: string) {
     const container = document.createElement("div");
-    container.innerHTML = sourceHtml;
+    // Sanitize before the HTML reaches the active document. Event handlers on
+    // images and other elements run even while the tree is detached, so Quill's
+    // own clipboard pass is too late to make this safe.
+    container.innerHTML = DOMPurify.sanitize(sourceHtml, {
+      FORBID_TAGS: ["style"],
+      FORBID_ATTR: ["style"]
+    });
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
     const textNodes: Text[] = [];
     while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
