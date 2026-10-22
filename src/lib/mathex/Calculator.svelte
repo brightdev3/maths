@@ -124,6 +124,18 @@
     }
   }
 
+  function focusInputAtEnd() {
+    queueMicrotask(() => {
+      try {
+        const el = inputEl;
+        if (!el || document.activeElement === el) return;
+        el.focus();
+        const len = expr.length;
+        el.setSelectionRange(len, len);
+      } catch {}
+    });
+  }
+
   function insert(token: string) {
     // Editing after an error should edit the previous expression,
     // not move the word "Error" into the input.
@@ -133,21 +145,19 @@
       return;
     }
     if (result !== null) {
+      result = null;
       if (/^[0-9.]$/.test(token)) {
         expr = token;
+      } else if (token === "Ans" || token === "π" || token === "e") {
+        expr = token;
+      } else if (token !== "(" && token.endsWith("(")) {
+        // Functions apply to the previous answer, e.g. sqrt(Ans) or sin(Ans).
+        expr = token + "Ans";
       } else {
-        expr = result + token;
+        // Operators and suffixes continue from the previous answer, e.g. Ans+.
+        expr = "Ans" + token;
       }
-      result = null;
-      queueMicrotask(() => {
-        try {
-          const el = inputEl;
-          if (el && document.activeElement === el) {
-            const len = expr.length;
-            el.setSelectionRange(len, len);
-          }
-        } catch {}
-      });
+      focusInputAtEnd();
       return;
     }
     insertAtCursor(token);
@@ -309,16 +319,19 @@
     if (event.key === "Enter" || event.key === "=") {
       event.preventDefault();
       calculate();
+      focusInputAtEnd();
       return;
     }
     if (event.key === "Backspace") {
       event.preventDefault();
       backspace();
+      focusInputAtEnd();
       return;
     }
     if (event.key === "Escape") {
       event.preventDefault();
       clearAll();
+      focusInputAtEnd();
       return;
     }
     if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -330,6 +343,7 @@
         else if (k === "/") token = "÷";
         else if (k === "-") token = "−";
         insert(token);
+        focusInputAtEnd();
       }
     }
   }
@@ -470,7 +484,10 @@
           <button
             type="button"
             class="rounded-md px-1.5 py-0.5 text-[0.65rem] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-            onclick={clearHistory}
+            onclick={() => {
+              clearHistory();
+              focusInputAtEnd();
+            }}
           >
             Clear
           </button>
@@ -499,7 +516,10 @@
           variant={key.variant}
           size="sm"
           class="h-9 px-0 font-mono text-xs {key.accent ? '' : ''}"
-          onclick={key.action}
+          onclick={() => {
+            key.action();
+            focusInputAtEnd();
+          }}
           title={key.title ?? key.label}
           aria-label={key.icon ? (key.title ?? key.label) : undefined}
         >
