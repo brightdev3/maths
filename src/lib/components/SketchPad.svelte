@@ -20,6 +20,12 @@
   import Layers2 from "@lucide/svelte/icons/layers-2";
   import StickyNote from "@lucide/svelte/icons/sticky-note";
   import FileQuestion from "@lucide/svelte/icons/file-question";
+  import Square from "@lucide/svelte/icons/square";
+  import Wrench from "@lucide/svelte/icons/wrench";
+  import Compass from "@lucide/svelte/icons/compass";
+  import CircleDot from "@lucide/svelte/icons/circle-dot";
+  import Ruler from "@lucide/svelte/icons/ruler";
+  import Magnet from "@lucide/svelte/icons/magnet";
   import X from "@lucide/svelte/icons/x";
 
   type AnswerType = "number" | "text" | "expression";
@@ -28,12 +34,14 @@
   let {
     open = true,
     onclose = () => {},
+    mode = "tool",
     question = "",
     answerType = null,
     onanswersubmit = undefined
   }: {
     open?: boolean;
     onclose?: () => void;
+    mode?: "tool" | "mathex";
     question?: string;
     answerType?: AnswerType | null;
     onanswersubmit?: (answer: string | number) => void;
@@ -69,13 +77,15 @@
   };
   type ShapeHandle = "start" | "end" | "nw" | "ne" | "sw" | "se" | "center" | "radius" | `vertex-${number}`;
   type Tool = "pen" | "eraser" | "text" | "interact" | "shape" | "move";
-  type ViewMode = "overlay" | "grid" | "question";
+  type ViewMode = "blank" | "overlay" | "grid" | "question";
+  type ConstructionTool = "circumcircle" | "incircle" | "bisector" | "slide-line" | null;
 
   const MIN_W = 60;
   const MIN_H = 36;
   const PAD = 6;
   const BORDER_TOL = 7;
   const HANDLE_R = 14;
+  const SNAP_DIST = 14;
 
   let canvas: HTMLCanvasElement | null = $state(null);
   // Every stroke, textbox and shape is stored individually so they can be
@@ -119,6 +129,8 @@
     shapeDraw = null;
     shapeHandleDrag = null;
     shapeMoveDrag = null;
+    lineSlideDrag = null;
+    lineEndpointDrag = null;
     redraw();
   }
 
@@ -137,7 +149,12 @@
   let polygonSides = $state(3);
   let shapesOpen = $state(false);
   let viewOpen = $state(false);
-  let view: ViewMode = $state("overlay");
+  let toolsOpen = $state(false);
+  let construction: ConstructionTool = $state(null);
+  let constructionPoints = $state<Point[]>([]);
+  let snapPreview: Point | null = $state(null);
+  let snapEnabled = $state(true);
+  let view = $state<ViewMode>("blank");
   let regularShapes = $state(false);
   let sketchAnswer = $state<AnswerValue>(null);
   let color = $state("#171717");
@@ -185,6 +202,22 @@
     dirY: number;
   } | null = null;
   let shapeMoveDrag: { id: string; lastX: number; lastY: number } | null = null;
+  let lineSlideDrag: {
+    id: string;
+    startX: number;
+    startY: number;
+    startProj: number;
+    dirX: number;
+    dirY: number;
+  } | null = null;
+  let lineEndpointDrag: {
+    id: string;
+    endpoint: "start" | "end";
+    startX: number;
+    startY: number;
+    w: number;
+    h: number;
+  } | null = null;
 
   const colors = ["#171717", "#ffffff", "#dc2626", "#2563eb", "#16a34a", "#9333ea", "#ea580c"];
 
@@ -192,8 +225,8 @@
   const selectedShape = $derived(shapes.find((s) => s.id === selectedId) ?? null);
   const hoverBox = $derived(boxes.find((b) => b.id === hoverId) ?? null);
   const hoverShape = $derived(shapes.find((s) => s.id === hoverShapeId) ?? null);
-  const canShowQuestion = $derived(question.trim() !== "" && !!answerType && !!onanswersubmit);
-  const pageInteraction = $derived(tool === "interact" && view === "overlay");
+  const canShowQuestion = $derived(mode === "mathex" && question.trim() !== "" && !!answerType && !!onanswersubmit);
+  const pageInteraction = $derived(mode === "mathex" && tool === "interact" && view === "overlay" && !construction);
   const canSubmitSketch = $derived(sketchAnswer !== null && sketchAnswer !== "");
 
   $effect(() => {
@@ -203,7 +236,11 @@
   });
 
   $effect(() => {
-    if (!canShowQuestion && view === "question") view = "overlay";
+    if (mode !== "mathex") {
+      if (view === "overlay" || view === "question") view = "blank";
+    } else if (view === "blank" || (!canShowQuestion && view === "question")) {
+      view = "overlay";
+    }
   });
   const editorBox = $derived.by(() => {
     const ed = editor;
@@ -529,6 +566,318 @@
     return shapeHandlePoints(shape).find((h) => Math.hypot(p.x - h.x, p.y - h.y) <= HANDLE_R)?.key ?? null;
   }
 
+  type Segment = { a: Point; b: Point };
+  type CircleGeometry = { center: Point; radius: number };
+
+  function shapeSegments(shape: Shape): Segment[] {
+    if (shape.kind === "line") {
+      return [{ a: { x: shape.x, y: shape.y }, b: { x: shape.x + shape.w, y: shape.y + shape.h } }];
+    }
+    if (shape.kind === "rect") {
+      const box = shapeBox(shape);
+      const tl = { x: box.x, y: box.y };
+      const tr = { x: box.x + box.w, y: box.y };
+      const br = { x: box.x + box.w, y: box.y + box.h };
+      const bl = { x: box.x, y: box.y + box.h };
+      return [
+        { a: tl, b: tr },
+        { a: tr, b: br },
+        { a: br, b: bl },
+        { a: bl, b: tl }
+      ];
+    }
+    if (shape.kind === "polygon") {
+      const points = shape.points ?? [];
+      const segments: Segment[] = [];
+      for (let i = 0; i < points.length; i++) {
+        const next = points[(i + 1) % points.length];
+        if (next) segments.push({ a: points[i], b: next });
+      }
+      return segments;
+    }
+    return [];
+  }
+
+  function shapeCircle(shape: Shape): CircleGeometry | null {
+    if (shape.kind !== "circle") return null;
+    return {
+      center: { x: shape.x, y: shape.y },
+      radius: Math.hypot(shape.w, shape.h)
+    };
+  }
+
+  function segmentIntersection(a: Segment, b: Segment): Point | null {
+    const rx = a.b.x - a.a.x;
+    const ry = a.b.y - a.a.y;
+    const sx = b.b.x - b.a.x;
+    const sy = b.b.y - b.a.y;
+    const denom = rx * sy - ry * sx;
+    if (Math.abs(denom) < 1e-9) return null;
+    const t = ((b.a.x - a.a.x) * sy - (b.a.y - a.a.y) * sx) / denom;
+    const u = ((b.a.x - a.a.x) * ry - (b.a.y - a.a.y) * rx) / denom;
+    if (t < -1e-6 || t > 1 + 1e-6 || u < -1e-6 || u > 1 + 1e-6) return null;
+    return { x: a.a.x + t * rx, y: a.a.y + t * ry };
+  }
+
+  function segmentCircleIntersections(segment: Segment, circle: CircleGeometry): Point[] {
+    const dx = segment.b.x - segment.a.x;
+    const dy = segment.b.y - segment.a.y;
+    const fx = segment.a.x - circle.center.x;
+    const fy = segment.a.y - circle.center.y;
+    const a = dx * dx + dy * dy;
+    if (a < 1e-9) return [];
+    const b = 2 * (fx * dx + fy * dy);
+    const c = fx * fx + fy * fy - circle.radius * circle.radius;
+    const discriminant = b * b - 4 * a * c;
+    if (discriminant < 0) return [];
+    const root = Math.sqrt(discriminant);
+    const results: Point[] = [];
+    for (const t of [(-b - root) / (2 * a), (-b + root) / (2 * a)]) {
+      if (t >= -1e-6 && t <= 1 + 1e-6) {
+        results.push({ x: segment.a.x + dx * t, y: segment.a.y + dy * t });
+      }
+    }
+    return results;
+  }
+
+  function circleIntersections(a: CircleGeometry, b: CircleGeometry): Point[] {
+    const dx = b.center.x - a.center.x;
+    const dy = b.center.y - a.center.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance < 1e-9 || distance > a.radius + b.radius || distance < Math.abs(a.radius - b.radius)) {
+      return [];
+    }
+    const along = (a.radius * a.radius - b.radius * b.radius + distance * distance) / (2 * distance);
+    const heightSq = a.radius * a.radius - along * along;
+    if (heightSq < 0) return [];
+    const mx = a.center.x + (along * dx) / distance;
+    const my = a.center.y + (along * dy) / distance;
+    if (heightSq < 1e-9) return [{ x: mx, y: my }];
+    const height = Math.sqrt(heightSq);
+    return [
+      { x: mx - (height * dy) / distance, y: my + (height * dx) / distance },
+      { x: mx + (height * dy) / distance, y: my - (height * dx) / distance }
+    ];
+  }
+
+  function collectSnapAnchors(): Point[] {
+    const anchors: Point[] = [];
+    const segments: Segment[] = [];
+    const circles: CircleGeometry[] = [];
+    for (const shape of shapes) {
+      segments.push(...shapeSegments(shape));
+      const circle = shapeCircle(shape);
+      if (circle) {
+        circles.push(circle);
+        anchors.push(circle.center);
+      }
+    }
+    for (let i = 0; i < segments.length; i++) {
+      for (let j = i + 1; j < segments.length; j++) {
+        const hit = segmentIntersection(segments[i], segments[j]);
+        if (hit) anchors.push(hit);
+      }
+    }
+    for (const segment of segments) {
+      for (const circle of circles) anchors.push(...segmentCircleIntersections(segment, circle));
+    }
+    for (let i = 0; i < circles.length; i++) {
+      for (let j = i + 1; j < circles.length; j++) {
+        anchors.push(...circleIntersections(circles[i], circles[j]));
+      }
+    }
+    const unique: Point[] = [];
+    for (const anchor of anchors) {
+      if (!unique.some((point) => Math.hypot(point.x - anchor.x, point.y - anchor.y) < 0.5)) {
+        unique.push(anchor);
+      }
+    }
+    return unique;
+  }
+
+  function snapPoint(p: Point): Point {
+    if (!snapEnabled) return p;
+    let best = p;
+    let bestDistance = SNAP_DIST;
+    for (const anchor of collectSnapAnchors()) {
+      const distance = Math.hypot(anchor.x - p.x, anchor.y - p.y);
+      if (distance < bestDistance) {
+        best = anchor;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  function circumcircle(a: Point, b: Point, c: Point): CircleGeometry | null {
+    const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+    if (Math.abs(d) < 1e-9) return null;
+    const aSq = a.x * a.x + a.y * a.y;
+    const bSq = b.x * b.x + b.y * b.y;
+    const cSq = c.x * c.x + c.y * c.y;
+    const center = {
+      x: (aSq * (b.y - c.y) + bSq * (c.y - a.y) + cSq * (a.y - b.y)) / d,
+      y: (aSq * (c.x - b.x) + bSq * (a.x - c.x) + cSq * (b.x - a.x)) / d
+    };
+    return { center, radius: Math.hypot(center.x - a.x, center.y - a.y) };
+  }
+
+  function incircle(a: Point, b: Point, c: Point): CircleGeometry | null {
+    const aSide = Math.hypot(b.x - c.x, b.y - c.y);
+    const bSide = Math.hypot(a.x - c.x, a.y - c.y);
+    const cSide = Math.hypot(a.x - b.x, a.y - b.y);
+    const perimeter = aSide + bSide + cSide;
+    if (perimeter < 1e-9) return null;
+    const center = {
+      x: (aSide * a.x + bSide * b.x + cSide * c.x) / perimeter,
+      y: (aSide * a.y + bSide * b.y + cSide * c.y) / perimeter
+    };
+    const area = Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2;
+    const radius = (2 * area) / perimeter;
+    if (radius < 1e-6) return null;
+    return { center, radius };
+  }
+
+  function angleBisector(vertex: Point, first: Point, second: Point): { start: Point; end: Point } | null {
+    const firstLength = Math.hypot(first.x - vertex.x, first.y - vertex.y);
+    const secondLength = Math.hypot(second.x - vertex.x, second.y - vertex.y);
+    if (firstLength < 1e-6 || secondLength < 1e-6) return null;
+    const ux = (first.x - vertex.x) / firstLength + (second.x - vertex.x) / secondLength;
+    const uy = (first.y - vertex.y) / firstLength + (second.y - vertex.y) / secondLength;
+    let length = Math.hypot(ux, uy);
+    let dirX = ux;
+    let dirY = uy;
+    if (length < 1e-6) {
+      dirX = -(first.y - vertex.y) / firstLength;
+      dirY = (first.x - vertex.x) / firstLength;
+      length = 1;
+    } else {
+      dirX /= length;
+      dirY /= length;
+    }
+    const segmentLength = Math.max(60, (firstLength + secondLength) / 2);
+    return {
+      start: { x: vertex.x, y: vertex.y },
+      end: { x: vertex.x + dirX * segmentLength, y: vertex.y + dirY * segmentLength }
+    };
+  }
+
+  function nextShapeId() {
+    return `sh-${Date.now().toString(36)}-${nextId++}`;
+  }
+
+  function addCircleShape(circle: CircleGeometry) {
+    if (circle.radius < 1) return;
+    shapes.push({
+      id: nextShapeId(),
+      kind: "circle",
+      x: circle.center.x,
+      y: circle.center.y,
+      w: circle.radius,
+      h: 0,
+      color,
+      width: lineWidth
+    });
+  }
+
+  function addLineShape(segment: { start: Point; end: Point }) {
+    shapes.push({
+      id: nextShapeId(),
+      kind: "line",
+      x: segment.start.x,
+      y: segment.start.y,
+      w: segment.end.x - segment.start.x,
+      h: segment.end.y - segment.start.y,
+      color,
+      width: lineWidth
+    });
+  }
+
+  function completeConstruction() {
+    const points = constructionPoints;
+    let added = false;
+    if (construction === "circumcircle" && points.length === 3) {
+      const circle = circumcircle(points[0], points[1], points[2]);
+      if (circle) {
+        addCircleShape(circle);
+        added = true;
+      }
+    } else if (construction === "incircle" && points.length === 3) {
+      const circle = incircle(points[0], points[1], points[2]);
+      if (circle) {
+        addCircleShape(circle);
+        added = true;
+      }
+    } else if (construction === "bisector" && points.length === 3) {
+      const line = angleBisector(points[0], points[1], points[2]);
+      if (line) {
+        addLineShape(line);
+        added = true;
+      }
+    }
+    construction = null;
+    constructionPoints = [];
+    snapPreview = null;
+    if (added) {
+      snapshot();
+      redraw();
+    }
+  }
+
+  function pickConstructionPoint(p: Point) {
+    constructionPoints = [...constructionPoints, snapPoint(p)];
+    snapPreview = null;
+    if (constructionPoints.length >= 3) completeConstruction();
+  }
+
+  function constructionPrompt() {
+    if (construction === "slide-line") {
+      return "Drag a line to slide it, or drag an endpoint to extend or shorten it.";
+    }
+    if (!construction) return "";
+    const name =
+      construction === "circumcircle" ? "Circumcentre" : construction === "incircle" ? "Incentre" : "Angle bisector";
+    const left = Math.max(0, 3 - constructionPoints.length);
+    if (construction === "bisector") {
+      return `${name}: pick the vertex, then two points (${left} left)`;
+    }
+    return `${name}: pick 3 points (${left} left)`;
+  }
+
+  function constructionDown(event: PointerEvent, p: Point) {
+    if (construction === "slide-line") {
+      const line = [...shapes].reverse().find((shape) => shape.kind === "line" && shapeHit(shape, p, 8));
+      if (!line) {
+        selectedId = null;
+        return;
+      }
+      selectedId = line.id;
+      const length = Math.hypot(line.w, line.h);
+      if (length < 1e-6) return;
+      const dirX = line.w / length;
+      const dirY = line.h / length;
+      const start = { x: line.x, y: line.y };
+      const end = { x: line.x + line.w, y: line.y + line.h };
+      if (Math.hypot(p.x - start.x, p.y - start.y) <= HANDLE_R) {
+        lineEndpointDrag = { id: line.id, endpoint: "start", startX: line.x, startY: line.y, w: line.w, h: line.h };
+      } else if (Math.hypot(p.x - end.x, p.y - end.y) <= HANDLE_R) {
+        lineEndpointDrag = { id: line.id, endpoint: "end", startX: line.x, startY: line.y, w: line.w, h: line.h };
+      } else {
+        lineSlideDrag = {
+          id: line.id,
+          startX: line.x,
+          startY: line.y,
+          startProj: p.x * dirX + p.y * dirY,
+          dirX,
+          dirY
+        };
+      }
+      capturePointer(event.target, event.pointerId);
+      return;
+    }
+    pickConstructionPoint(p);
+  }
+
   // Eraser disc radius. A stroke is erased when the disc touches it.
   function eraserRadius() {
     return lineWidth * 1.5;
@@ -657,6 +1006,8 @@
     hoverId = null;
     shapesOpen = false;
     viewOpen = false;
+    toolsOpen = false;
+    cancelConstruction();
     tool = tool === next ? "pen" : next;
   }
 
@@ -666,6 +1017,8 @@
     hoverShapeId = null;
     colorOpen = false;
     viewOpen = false;
+    toolsOpen = false;
+    cancelConstruction();
     shapeKind = kind;
     tool = "shape";
   }
@@ -676,6 +1029,8 @@
     hoverShapeId = null;
     colorOpen = false;
     viewOpen = false;
+    toolsOpen = false;
+    cancelConstruction();
     tool = "move";
   }
 
@@ -684,6 +1039,8 @@
     hoverId = null;
     colorOpen = false;
     viewOpen = false;
+    toolsOpen = false;
+    cancelConstruction();
     if (shapesOpen) {
       shapesOpen = false;
     } else {
@@ -697,6 +1054,7 @@
     hoverId = null;
     colorOpen = false;
     shapesOpen = false;
+    toolsOpen = false;
     viewOpen = !viewOpen;
   }
 
@@ -704,6 +1062,38 @@
     commitText();
     view = next;
     viewOpen = false;
+  }
+
+  function cancelConstruction() {
+    construction = null;
+    constructionPoints = [];
+    snapPreview = null;
+    lineSlideDrag = null;
+    lineEndpointDrag = null;
+  }
+
+  function startConstruction(next: Exclude<ConstructionTool, null>) {
+    commitText();
+    colorOpen = false;
+    shapesOpen = false;
+    viewOpen = false;
+    toolsOpen = false;
+    hoverId = null;
+    hoverShapeId = null;
+    selectedId = null;
+    constructionPoints = [];
+    lineSlideDrag = null;
+    lineEndpointDrag = null;
+    snapPreview = null;
+    construction = next;
+  }
+
+  function toggleTools() {
+    commitText();
+    colorOpen = false;
+    shapesOpen = false;
+    viewOpen = false;
+    toolsOpen = !toolsOpen;
   }
 
   function submitSketchAnswer() {
@@ -991,11 +1381,26 @@
     colorOpen = false;
     shapesOpen = false;
     viewOpen = false;
-    if (tool === "interact") {
+    toolsOpen = false;
+    const p = position(event);
+    if (construction) {
       commitText();
+      constructionDown(event, p);
       return;
     }
-    const p = position(event);
+    if (tool === "interact") {
+      hoverShapeId = null;
+      commitText();
+      const hit = [...boxes].reverse().find((box) => insideBox(p, box, 0));
+      if (hit) {
+        selectedId = hit.id;
+        editor = { id: hit.id, x: hit.x, y: hit.y };
+        editorText = hit.text;
+        return;
+      }
+      moveShapeDown(event, p);
+      return;
+    }
     if (tool === "eraser") {
       selectedId = null;
       hoverShapeId = null;
@@ -1030,17 +1435,79 @@
     if (event.buttons === 0) {
       // No button held: end any stale gesture (e.g. a pointerup missed
       // outside the canvas) and just track the eraser ring.
-      if (drawing || currentStroke || moveDrag || resizeDrag || shapeDraw || shapeHandleDrag || shapeMoveDrag) onUp();
+      if (
+        drawing ||
+        currentStroke ||
+        moveDrag ||
+        resizeDrag ||
+        shapeDraw ||
+        shapeHandleDrag ||
+        shapeMoveDrag ||
+        lineSlideDrag ||
+        lineEndpointDrag
+      )
+        onUp();
       if (tool === "eraser") eraserPos = position(event);
-      if (tool === "text") {
+      if (tool === "text" || tool === "interact") {
         const p = position(event);
         hoverId = [...boxes].reverse().find((b) => insideBox(p, b, 0))?.id ?? null;
       }
-      if (tool === "move") {
+      if (tool === "move" || tool === "interact" || construction === "slide-line") {
         const p = position(event);
         hoverShapeId = [...shapes].reverse().find((s) => shapeHit(s, p))?.id ?? null;
       } else {
         hoverShapeId = null;
+      }
+      if (construction && construction !== "slide-line") {
+        const p = position(event);
+        if (snapEnabled) {
+          const snapped = snapPoint(p);
+          snapPreview = Math.hypot(snapped.x - p.x, snapped.y - p.y) > 0.5 ? snapped : null;
+        } else {
+          snapPreview = null;
+        }
+      } else {
+        snapPreview = null;
+      }
+      return;
+    }
+    const slide = lineSlideDrag;
+    if (slide) {
+      const line = shapes.find((shape) => shape.id === slide.id);
+      if (line) {
+        const p = position(event);
+        const amount = p.x * slide.dirX + p.y * slide.dirY - slide.startProj;
+        line.x = slide.startX + slide.dirX * amount;
+        line.y = slide.startY + slide.dirY * amount;
+        redraw();
+      }
+      return;
+    }
+    const endpoint = lineEndpointDrag;
+    if (endpoint) {
+      const line = shapes.find((shape) => shape.id === endpoint.id);
+      if (line) {
+        const length = Math.hypot(endpoint.w, endpoint.h);
+        if (length > 1e-6) {
+          const dirX = endpoint.w / length;
+          const dirY = endpoint.h / length;
+          const p = position(event);
+          const projection = (p.x - endpoint.startX) * dirX + (p.y - endpoint.startY) * dirY;
+          if (endpoint.endpoint === "start") {
+            const nextX = endpoint.startX + dirX * projection;
+            const nextY = endpoint.startY + dirY * projection;
+            line.x = nextX;
+            line.y = nextY;
+            line.w = endpoint.startX + endpoint.w - nextX;
+            line.h = endpoint.startY + endpoint.h - nextY;
+          } else {
+            line.x = endpoint.startX;
+            line.y = endpoint.startY;
+            line.w = dirX * projection;
+            line.h = dirY * projection;
+          }
+          redraw();
+        }
       }
       return;
     }
@@ -1187,6 +1654,15 @@
     }
   });
 
+  $effect(() => {
+    if (!construction) return;
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cancelConstruction();
+    };
+    window.addEventListener("keydown", cancel);
+    return () => window.removeEventListener("keydown", cancel);
+  });
+
   function finishShape(id: string) {
     const shape = shapes.find((s) => s.id === id);
     if (!shape) return;
@@ -1211,7 +1687,14 @@
     const shapeDrawn = shapeDraw;
     if (shapeDrawn) finishShape(shapeDrawn.id);
     const finished =
-      (drawing && currentStroke) || moveDrag || resizeDrag || shapeHandleDrag || shapeMoveDrag || shapeDrawn;
+      (drawing && currentStroke) ||
+      moveDrag ||
+      resizeDrag ||
+      shapeHandleDrag ||
+      shapeMoveDrag ||
+      shapeDrawn ||
+      lineSlideDrag ||
+      lineEndpointDrag;
     drawing = false;
     currentStroke = null;
     moveDrag = null;
@@ -1219,6 +1702,8 @@
     shapeDraw = null;
     shapeHandleDrag = null;
     shapeMoveDrag = null;
+    lineSlideDrag = null;
+    lineEndpointDrag = null;
     eraserPos = null;
     if (finished) snapshot();
   }
@@ -1231,6 +1716,8 @@
     hoverId = null;
     editor = null;
     editorText = "";
+    cancelConstruction();
+    toolsOpen = false;
     snapshot();
     redraw();
   }
@@ -1287,7 +1774,30 @@
       onpointerup={onUp}
       onpointercancel={onUp}
       onlostpointercapture={onUp}
+      onpointerleave={() => {
+        snapPreview = null;
+        hoverId = null;
+        hoverShapeId = null;
+      }}
     ></canvas>
+    {#if construction && construction !== "slide-line"}
+      {#each constructionPoints as point, index (index)}
+        <div
+          class="pointer-events-none absolute z-10 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-primary bg-card text-[9px] font-bold text-primary shadow"
+          style="left: {point.x}px; top: {point.y}px;"
+          aria-hidden="true"
+        >
+          {index + 1}
+        </div>
+      {/each}
+    {/if}
+    {#if snapPreview}
+      <div
+        class="pointer-events-none absolute z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary/80 bg-primary/10 shadow"
+        style="left: {snapPreview.x}px; top: {snapPreview.y}px;"
+        aria-hidden="true"
+      ></div>
+    {/if}
     {#if tool === "eraser" && eraserPos}
       {@const diameter = eraserRadius() * 2}
       <div
@@ -1309,7 +1819,7 @@
         ></div>
       </div>
     {/if}
-    {#if selectedShape && tool === "move"}
+    {#if selectedShape && (tool === "move" || construction === "slide-line")}
       {@const shape = selectedShape}
       {@const handles = shapeHandlePoints(shape)}
       {#if shape.kind === "circle"}
@@ -1339,7 +1849,7 @@
         ></div>
       {/each}
     {/if}
-    {#if hoverShape && tool === "move" && hoverShape.id !== selectedId}
+    {#if hoverShape && (tool === "move" || tool === "interact" || construction === "slide-line") && hoverShape.id !== selectedId}
       {@const shape = hoverShape}
       <svg class="pointer-events-none absolute inset-0 h-full w-full" fill="none" aria-hidden="true">
         {#if shape.kind === "line"}
@@ -1426,6 +1936,21 @@
         }}
       ></textarea>
     {/if}
+    {#if construction}
+      <div
+        class="pointer-events-auto absolute bottom-20 left-1/2 z-20 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs shadow"
+        role="status"
+      >
+        <span>{constructionPrompt()}</span>
+        <button
+          type="button"
+          class="shrink-0 rounded-[3px] px-1.5 py-0.5 font-medium text-primary transition-colors hover:bg-muted"
+          onclick={cancelConstruction}
+        >
+          Cancel
+        </button>
+      </div>
+    {/if}
   </div>
   <div
     class="absolute bottom-4 left-1/2 z-10 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 border border-border bg-card px-2.5 py-1.5 sm:gap-2 pointer-events-auto"
@@ -1447,8 +1972,10 @@
           : 'text-muted-foreground hover:bg-muted'}"
         onclick={() => setTool("interact")}
         aria-pressed={tool === "interact"}
-        aria-label="Interact with the page"
-        title="Scroll, answer and submit on the page behind the sketch"
+        aria-label={mode === "mathex" && view === "overlay" ? "Interact with the page" : "Select and move"}
+        title={mode === "mathex" && view === "overlay"
+          ? "Scroll, answer and submit on the page behind the sketch"
+          : "Select and move shapes"}
       >
         <MousePointer2 class="h-4 w-4" />
       </button>
@@ -1470,17 +1997,31 @@
             role="group"
             aria-label="View options"
           >
-            <Button
-              variant={view === "overlay" ? "default" : "ghost"}
-              size="icon"
-              class="size-8"
-              onclick={() => chooseView("overlay")}
-              aria-label="On top of page"
-              aria-pressed={view === "overlay"}
-              title="On top of page"
-            >
-              <Layers2 class="h-4 w-4" />
-            </Button>
+            {#if mode === "mathex"}
+              <Button
+                variant={view === "overlay" ? "default" : "ghost"}
+                size="icon"
+                class="size-8"
+                onclick={() => chooseView("overlay")}
+                aria-label="On top of page"
+                aria-pressed={view === "overlay"}
+                title="On top of page"
+              >
+                <Layers2 class="h-4 w-4" />
+              </Button>
+            {:else}
+              <Button
+                variant={view === "blank" ? "default" : "ghost"}
+                size="icon"
+                class="size-8"
+                onclick={() => chooseView("blank")}
+                aria-label="Blank"
+                aria-pressed={view === "blank"}
+                title="Blank background"
+              >
+                <Square class="h-4 w-4" />
+              </Button>
+            {/if}
             <Button
               variant={view === "grid" ? "default" : "ghost"}
               size="icon"
@@ -1541,6 +2082,7 @@
           colorOpen = !colorOpen;
           shapesOpen = false;
           viewOpen = false;
+          toolsOpen = false;
         }}
       ></button>
       {#if colorOpen}
@@ -1803,6 +2345,90 @@
               />
             </div>
           {/if}
+        </div>
+      {/if}
+    </div>
+    <div class="relative">
+      <Button
+        variant={toolsOpen || construction ? "default" : "ghost"}
+        size="icon"
+        class="size-8"
+        onclick={toggleTools}
+        aria-label="Construction tools"
+        aria-haspopup="true"
+        aria-expanded={toolsOpen}
+        title="Construction tools"
+      >
+        <Wrench class="h-4 w-4" />
+      </Button>
+      {#if toolsOpen}
+        <div
+          class="fixed bottom-24 left-1/2 z-30 max-h-[70vh] w-72 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow"
+          role="menu"
+          aria-label="Construction tools"
+        >
+          <button
+            type="button"
+            class="flex w-full items-start gap-2 rounded-[3px] px-2 py-2 text-left transition-colors hover:bg-muted"
+            role="menuitem"
+            onclick={() => startConstruction("circumcircle")}
+          >
+            <Compass class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span class="min-w-0">
+              <span class="block text-sm font-medium">Circumcentre</span>
+              <span class="block text-xs text-muted-foreground">Three points → a circle through all of them.</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-start gap-2 rounded-[3px] px-2 py-2 text-left transition-colors hover:bg-muted"
+            role="menuitem"
+            onclick={() => startConstruction("incircle")}
+          >
+            <CircleDot class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span class="min-w-0">
+              <span class="block text-sm font-medium">Incentre</span>
+              <span class="block text-xs text-muted-foreground">Three points → the circle inside the triangle.</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-start gap-2 rounded-[3px] px-2 py-2 text-left transition-colors hover:bg-muted"
+            role="menuitem"
+            onclick={() => startConstruction("bisector")}
+          >
+            <Ruler class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span class="min-w-0">
+              <span class="block text-sm font-medium">Angle bisector</span>
+              <span class="block text-xs text-muted-foreground">Pick the vertex, then a point on each arm.</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-start gap-2 rounded-[3px] px-2 py-2 text-left transition-colors hover:bg-muted"
+            role="menuitem"
+            onclick={() => startConstruction("slide-line")}
+          >
+            <Move class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span class="min-w-0">
+              <span class="block text-sm font-medium">Slide a line</span>
+              <span class="block text-xs text-muted-foreground"
+                >Drag a segment along its line, or drag an endpoint.</span
+              >
+            </span>
+          </button>
+          <label class="mt-1 flex items-start gap-2 border-t border-border px-2 py-2 text-left">
+            <input type="checkbox" class="mt-0.5 size-4 shrink-0 accent-primary" bind:checked={snapEnabled} />
+            <span class="min-w-0">
+              <span class="flex items-center gap-1 text-sm font-medium">
+                <Magnet class="h-3.5 w-3.5" />
+                Snap to geometry
+              </span>
+              <span class="block text-xs text-muted-foreground">
+                Points near intersections or circle centres land exactly on them.
+              </span>
+            </span>
+          </label>
         </div>
       {/if}
     </div>

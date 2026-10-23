@@ -1,5 +1,15 @@
 <script lang="ts">
-  import { ArrowUpRight, Brain, Calculator, CircleDot, Gamepad2, Pencil, Radio, Zap } from "@lucide/svelte/icons";
+  import {
+    ArrowUpRight,
+    Brain,
+    Calculator,
+    CircleDot,
+    Gamepad2,
+    PenTool,
+    Pencil,
+    Radio,
+    Zap
+  } from "@lucide/svelte/icons";
 
   interface Entry {
     name: string;
@@ -55,6 +65,15 @@
       icon: Radio
     }
   ];
+
+  const utilities: Entry[] = [
+    {
+      name: "Sketchpad",
+      description: "A full-screen drawing pad with pens, shapes, construction tools and an optional dot grid.",
+      url: "/tools/sketchpad",
+      icon: PenTool
+    }
+  ];
 </script>
 
 <div class="py-12 sm:py-16">
@@ -100,6 +119,13 @@
     <ul class="mt-4 border-t border-border">
       {#each games as game}
         {@render entryRow(game)}
+      {/each}
+    </ul>
+
+    <p class="mathex-kicker mt-12">Utilities</p>
+    <ul class="mt-4 border-t border-border">
+      {#each utilities as entry}
+        {@render entryRow(entry)}
       {/each}
     </ul>
 

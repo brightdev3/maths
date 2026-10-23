@@ -37,7 +37,7 @@
   import Send from "@lucide/svelte/icons/send";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Calculator from "$lib/mathex/Calculator.svelte";
-  import SketchPad from "$lib/mathex/SketchPad.svelte";
+  import SketchPad from "$lib/components/SketchPad.svelte";
 
   import { Confetti } from "svelte-confetti";
   let confetti = $state(false);
@@ -682,6 +682,7 @@
     <SketchPad
       open={sketchOpen && roomSettings?.allowSketch !== false}
       onclose={() => (sketchOpen = false)}
+      mode="mathex"
       question={currentQuestion.content}
       answerType={sketchAnswerType}
       onanswersubmit={submitSketchAnswer}
