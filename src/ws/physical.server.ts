@@ -39,6 +39,8 @@ export function registerPhysicalCompetitionServer(io: AnyServer): void {
   const store = new PhysicalCompetitionStore();
   const competitions = store.load();
   const registered = new Set<string>();
+  // Bounded per-code, per-address throttle for marker PIN attempts.
+  const markerAttempts = new Map<string, number[]>();
 
   const createNamespace: Namespace<
     PhysicalCreateClientToServerEvents,
@@ -49,11 +51,13 @@ export function registerPhysicalCompetitionServer(io: AnyServer): void {
 
   createNamespace.on("connection", (socket) => {
     socket.on("checkCompetition", (rawCode, callback) => {
+      if (typeof callback !== "function") return;
       const code = PhysicalCode.safeParse(rawCode);
       callback?.(code.success && competitions.has(code.data));
     });
 
     socket.on("createCompetition", (rawInput, callback) => {
+      if (typeof callback !== "function") return;
       const parsed = CreatePhysicalCompetitionInput.safeParse(rawInput);
       if (!parsed.success) {
         const error = parsed.error.issues[0]?.message || "Invalid competition settings";
@@ -137,12 +141,28 @@ export function registerPhysicalCompetitionServer(io: AnyServer): void {
       const token = typeof socket.handshake.auth.token === "string" ? socket.handshake.auth.token : "";
       next(safeTokenEqual(token, competition.hostToken) ? undefined : new Error("Unauthorized"));
     });
-    markerNamespace.use((socket, next) => {
+    markerNamespace.use(async (socket, next) => {
       const auth = socket.handshake.auth;
+      const forwarded = socket.handshake.headers["x-forwarded-for"];
+      const clientAddress =
+        (typeof forwarded === "string" ? forwarded.split(",")[0]?.trim() : "") || socket.handshake.address || "unknown";
+      const attemptKey = `${competition.code}:${clientAddress}`;
+      const now = Date.now();
+      const attempts = (markerAttempts.get(attemptKey) ?? []).filter((at) => now - at < 5 * 60_000);
+      if (attempts.length >= 20) {
+        next(new Error("Too many attempts"));
+        return;
+      }
       const validCode = PhysicalCode.safeParse(auth.code);
       const pin = typeof auth.pin === "string" ? auth.pin : "";
       const authenticated =
-        validCode.success && validCode.data === competition.code && verifyMarkerPin(pin, competition.markerPinHash);
+        validCode.success &&
+        validCode.data === competition.code &&
+        (await verifyMarkerPin(pin, competition.markerPinHash));
+      if (!authenticated) {
+        attempts.push(now);
+        markerAttempts.set(attemptKey, attempts);
+      }
       next(authenticated ? undefined : new Error("Unauthorized"));
     });
 
@@ -156,8 +176,12 @@ export function registerPhysicalCompetitionServer(io: AnyServer): void {
       store.save(competition);
       emitSnapshots();
     };
-    const reject = (ack: OperationAck, error: string): void => ack?.({ ok: false, error });
-    const accept = (ack: OperationAck): void => ack?.({ ok: true });
+    const reject = (ack: OperationAck, error: string): void => {
+      if (typeof ack === "function") ack({ ok: false, error });
+    };
+    const accept = (ack: OperationAck): void => {
+      if (typeof ack === "function") ack({ ok: true });
+    };
 
     hostNamespace.on("connection", (socket) => {
       socket.emit("snapshot", buildSnapshot(competition));

@@ -313,6 +313,11 @@
   let tick = $state(0);
   setInterval(() => tick++, 1000);
 
+  function csvCell(value: string) {
+    const guarded = /^[=+\-@\t\r]/.test(value.trimStart()) ? `'${value}` : value;
+    return `"${guarded.replace(/"/g, '""')}"`;
+  }
+
   function exportScores() {
     if (leaderboard.length === 0) {
       toast.error("No results to export yet!");
@@ -330,7 +335,7 @@
       const header = "Rank,Name,Time (ms),Time,Questions Completed,Total Questions";
       const rows = leaderboard.map(
         (e) =>
-          `${e.rank},"${e.name}",${e.totalMs ?? "DNF"},${e.totalMs ? msToMinutesAndSeconds(e.totalMs) : "DNF"},${e.questionsCompleted},${e.totalQuestions}`
+          `${e.rank},${csvCell(e.name)},${e.totalMs ?? "DNF"},${e.totalMs ? msToMinutesAndSeconds(e.totalMs) : "DNF"},${e.questionsCompleted},${e.totalQuestions}`
       );
       content = [header, ...rows].join("\n");
       filename = `mathex-results-${roomId}.csv`;

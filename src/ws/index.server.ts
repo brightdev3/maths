@@ -75,8 +75,9 @@ export const createWSServer = (base: ServerInstance) => {
   > = io.of("/rooms");
   roomCreateNamespace.on("connection", (socket) => {
     socket.on("newRoom", (name, questions, runningTimeMs, visibilityTracking, settings) => {
-      const roomName = RoomName.parse(name);
-      const roomQuestions = z.array(Question).parse(questions);
+      const roomName = RoomName.safeParse(name);
+      const roomQuestions = z.array(Question).safeParse(questions);
+      if (!roomName.success || !roomQuestions.success) return;
       const clampedTime = Math.min(Math.max(runningTimeMs || 16000, 1000), 60000);
       const roomSettings = sanitizeRoomSettings(settings);
 
@@ -87,8 +88,8 @@ export const createWSServer = (base: ServerInstance) => {
       const runToken = randomBytes(128).toString("hex").toUpperCase();
       const room: Room = {
         id: roomId,
-        name: roomName,
-        questions: roomQuestions,
+        name: roomName.data,
+        questions: roomQuestions.data,
         runToken,
         state: "lobby",
         runningTimeMs: clampedTime,
@@ -104,7 +105,10 @@ export const createWSServer = (base: ServerInstance) => {
       socket.emit("goto", `/mathex/app/manage?id=${roomId}&runToken=${runToken}`);
       socket.disconnect();
     });
-    socket.on("checkRoom", (id, callback) => callback(rooms.has(id)));
+    socket.on("checkRoom", (id, callback) => {
+      if (typeof callback !== "function") return;
+      callback(typeof id === "string" && rooms.has(id));
+    });
   });
 
   const roomManageNamespace = io.of(/^\/manage\-\d{6}$/) as Namespace<
@@ -113,6 +117,15 @@ export const createWSServer = (base: ServerInstance) => {
     RoomManageInterServerEvents,
     RoomManageSocketData
   >;
+  // The regex namespace covers every room. Emitting on it broadcasts to every
+  // manager connection, so room-scoped events must use the concrete namespace.
+  const manageNamespaceFor = (id: string) =>
+    io.of(`/manage-${id}`) as Namespace<
+      RoomManageClientToServerEvents,
+      RoomManageServerToClientEvents,
+      RoomManageInterServerEvents,
+      RoomManageSocketData
+    >;
   roomManageNamespace.on("connection", (socket) => {
     const roomId = /\d{6}/.exec(socket.nsp.name)?.[0];
     if (!roomId) throw Error("No room ID!");
@@ -181,9 +194,9 @@ export const createWSServer = (base: ServerInstance) => {
       roomNamespace.emit("roomSettings", room.settings);
       roomNamespace.emit("gameEndsAt", room.endsAt);
       roomNamespace.emit("leaderboard", buildLeaderboard(room));
-      roomManageNamespace.emit("state", room.state);
-      roomManageNamespace.emit("playerData", getPlayers(room));
-      roomManageNamespace.emit("gameEndsAt", room.endsAt);
+      manageNamespaceFor(room.id).emit("state", room.state);
+      manageNamespaceFor(room.id).emit("playerData", getPlayers(room));
+      manageNamespaceFor(room.id).emit("gameEndsAt", room.endsAt);
     });
     socket.on("finish", async () => {
       await finishRoom(room, "host");
@@ -204,7 +217,7 @@ export const createWSServer = (base: ServerInstance) => {
       }
       saveRoom(room);
       roomNamespace.emit("roomSettings", room.settings);
-      roomManageNamespace.emit("roomSettings", room.settings);
+      manageNamespaceFor(room.id).emit("roomSettings", room.settings);
       if (!chatWasAllowed && next.allowChat && room.chat.length > 0) {
         roomNamespace.emit("chatHistory", room.chat);
         socket.emit("chatHistory", room.chat);
@@ -216,11 +229,11 @@ export const createWSServer = (base: ServerInstance) => {
           clearEndTimer(room.id);
           room.endsAt = null;
           roomNamespace.emit("gameEndsAt", null);
-          roomManageNamespace.emit("gameEndsAt", null);
+          manageNamespaceFor(room.id).emit("gameEndsAt", null);
         }
         room.settings.gameTimerMs = null;
         saveRoom(room);
-        roomManageNamespace.emit("roomSettings", room.settings);
+        manageNamespaceFor(room.id).emit("roomSettings", room.settings);
         return;
       }
       const mins = Math.min(Math.max(Number(minutes) || 0, 0.5), 480);
@@ -230,11 +243,11 @@ export const createWSServer = (base: ServerInstance) => {
         scheduleEndTimer(room, room.endsAt - Date.now());
         saveRoom(room);
         roomNamespace.emit("gameEndsAt", room.endsAt);
-        roomManageNamespace.emit("gameEndsAt", room.endsAt);
+        manageNamespaceFor(room.id).emit("gameEndsAt", room.endsAt);
       } else {
         room.settings.gameTimerMs = Math.round(mins * 60000);
         saveRoom(room);
-        roomManageNamespace.emit("roomSettings", room.settings);
+        manageNamespaceFor(room.id).emit("roomSettings", room.settings);
       }
     });
     socket.on("kick", async (playerId) => {
@@ -250,9 +263,9 @@ export const createWSServer = (base: ServerInstance) => {
       };
       room.logs.push(kickLog);
       saveRoom(room);
-      roomManageNamespace.emit("log", kickLog);
-      roomManageNamespace.emit("playerData", getPlayers(room));
-      if (room.state === "finished") roomManageNamespace.emit("leaderboard", buildLeaderboard(room));
+      manageNamespaceFor(room.id).emit("log", kickLog);
+      manageNamespaceFor(room.id).emit("playerData", getPlayers(room));
+      if (room.state === "finished") manageNamespaceFor(room.id).emit("leaderboard", buildLeaderboard(room));
       for (const playerSocket of await roomNamespace.fetchSockets()) {
         if (playerSocket.data.playerId === playerId) {
           playerSocket.emit("kicked");
@@ -277,7 +290,7 @@ export const createWSServer = (base: ServerInstance) => {
       if (room.chat.length > 200) room.chat = room.chat.slice(-200);
       saveRoom(room);
       roomNamespace.emit("chatMessage", message);
-      roomManageNamespace.emit("chatMessage", message);
+      manageNamespaceFor(room.id).emit("chatMessage", message);
     });
     socket.on("deleteChat", (id) => {
       const target = String(id ?? "");
@@ -287,7 +300,7 @@ export const createWSServer = (base: ServerInstance) => {
       room.chat.splice(index, 1);
       saveRoom(room);
       roomNamespace.emit("chatDelete", target);
-      roomManageNamespace.emit("chatDelete", target);
+      manageNamespaceFor(room.id).emit("chatDelete", target);
     });
   });
 
@@ -314,12 +327,14 @@ export const createWSServer = (base: ServerInstance) => {
       name: null,
       isRunning: false,
       runningUntil: null,
+      pendingSubmission: null,
       awaySince: null,
       visibilityFlags: 0,
       skips: 0,
       correctCount: 0
     };
     socket.on("join", async (name, playerId) => {
+      if (typeof name !== "string" || typeof playerId !== "string") return;
       const playerName = name.trim();
       if (!playerName || playerName.length > 20 || !playerId || playerId.length > 128) return;
       const room = rooms.get(roomId);
@@ -329,6 +344,11 @@ export const createWSServer = (base: ServerInstance) => {
       }
       const existingPlayer = room.players.get(playerId);
       if (existingPlayer) {
+        // A rejoin cannot receive a result queued for the previous socket.
+        // Cancel that submission so its timer cannot mutate this player later.
+        existingPlayer.isRunning = false;
+        existingPlayer.runningUntil = null;
+        existingPlayer.pendingSubmission = null;
         socket.data = existingPlayer;
       } else {
         if (room.state !== "lobby" && !room.settings.allowLateJoin) {
@@ -381,80 +401,96 @@ export const createWSServer = (base: ServerInstance) => {
       }
     });
     socket.on("answer", (answer) => {
-      if (!socket.data.name || room.state !== "started" || socket.data.isRunning) return;
+      const player = socket.data;
+      if (!player.name || room.state !== "started" || player.isRunning) return;
 
-      const currentQuestion = room.questions[socket.data.currentQuestion - 1];
-      socket.data.isRunning = true;
-      socket.data.runningUntil = Date.now() + room.runningTimeMs;
+      const questionNumber = player.currentQuestion;
+      const currentQuestion = room.questions[questionNumber - 1];
+      if (!currentQuestion) return;
+      const submissionId = randomBytes(8).toString("hex");
+      player.isRunning = true;
+      player.runningUntil = Date.now() + room.runningTimeMs;
+      player.pendingSubmission = submissionId;
       socket.emit("running", room.runningTimeMs);
 
       const submitLog: LogEntry = {
         timestamp: Date.now(),
-        playerName: socket.data.name || "Unknown",
+        playerName: player.name || "Unknown",
         type: "submitted",
-        questionNumber: socket.data.currentQuestion,
+        questionNumber,
         detail: String(answer)
       };
       room.logs.push(submitLog);
       saveRoom(room);
-      roomManageNamespace.emit("log", submitLog);
+      manageNamespaceFor(room.id).emit("log", submitLog);
 
       const isCorrect = checkSolution(answer, currentQuestion);
+      // The player record is shared across reconnects, so verify that this timer
+      // still belongs to the same submission and question before applying it.
+      const stillValid = () =>
+        room.state === "started" &&
+        player.pendingSubmission === submissionId &&
+        player.currentQuestion === questionNumber &&
+        room.players.get(player.playerId ?? "") === player;
+
       setTimeout(async () => {
+        if (!stillValid()) return;
         socket.emit("answerResult", isCorrect);
-        socket.data.runningUntil = Date.now() + 900;
+        player.runningUntil = Date.now() + 900;
 
         // Let the player see the outcome before presenting the next action.
         setTimeout(async () => {
+          if (!stillValid()) return;
           if (isCorrect) {
             socket.emit("alert", "success", "Correct!");
-            socket.data.correctCount = (socket.data.correctCount ?? 0) + 1;
+            player.correctCount = (player.correctCount ?? 0) + 1;
             const correctLog: LogEntry = {
               timestamp: Date.now(),
-              playerName: socket.data.name || "Unknown",
+              playerName: player.name || "Unknown",
               type: "correct",
-              questionNumber: socket.data.currentQuestion
+              questionNumber
             };
             room.logs.push(correctLog);
             saveRoom(room);
-            roomManageNamespace.emit("log", correctLog);
-            if (room.settings.endOnPerfectScore && (socket.data.correctCount ?? 0) >= room.questions.length) {
+            manageNamespaceFor(room.id).emit("log", correctLog);
+            if (room.settings.endOnPerfectScore && (player.correctCount ?? 0) >= room.questions.length) {
               socket.emit("confetti");
               socket.emit("stopRunning");
-              socket.data.isRunning = false;
-              socket.data.runningUntil = null;
+              player.isRunning = false;
+              player.runningUntil = null;
+              player.pendingSubmission = null;
               saveRoom(room);
-              await finishRoom(room, "perfect", socket.data.name || undefined);
+              await finishRoom(room, "perfect", player.name || undefined);
               return;
             }
-            if (socket.data.currentQuestion >= room.questions.length) {
-              socket.data.finishingTime = Date.now();
+            if (questionNumber >= room.questions.length) {
+              player.finishingTime = Date.now();
               socket.emit("alert", "success", "You have completed the questions!");
               socket.emit("gameFinish");
               socket.emit("confetti");
               socket.nsp.emit("leaderboard", buildLeaderboard(room));
-              roomManageNamespace.emit("alert", "info", `${socket.data.name} has finished all questions!`);
+              manageNamespaceFor(room.id).emit("alert", "info", `${player.name} has finished all questions!`);
               const finishLog: LogEntry = {
                 timestamp: Date.now(),
-                playerName: socket.data.name || "Unknown",
+                playerName: player.name || "Unknown",
                 type: "finished",
-                questionNumber: socket.data.currentQuestion
+                questionNumber
               };
               room.logs.push(finishLog);
               saveRoom(room);
-              roomManageNamespace.emit("log", finishLog);
-              roomManageNamespace.emit("leaderboard", buildLeaderboard(room));
+              manageNamespaceFor(room.id).emit("log", finishLog);
+              manageNamespaceFor(room.id).emit("leaderboard", buildLeaderboard(room));
             } else {
-              socket.data.currentQuestion++;
+              player.currentQuestion++;
               saveRoom(room);
-              const nextQuestion = room.questions[socket.data.currentQuestion - 1];
+              const nextQuestion = room.questions[player.currentQuestion - 1];
               socket.emit(
                 "newQuestion",
                 nextQuestion.contents,
                 answerGroups(nextQuestion),
                 nextQuestion.requireAllSolutionGroups,
                 nextQuestion.solutionOrderMatters,
-                socket.data.currentQuestion,
+                player.currentQuestion,
                 nextQuestion.skippable
               );
             }
@@ -464,18 +500,19 @@ export const createWSServer = (base: ServerInstance) => {
             socket.emit("alert", "error", "Wrong!");
             const wrongLog: LogEntry = {
               timestamp: Date.now(),
-              playerName: socket.data.name || "Unknown",
+              playerName: player.name || "Unknown",
               type: "wrong",
-              questionNumber: socket.data.currentQuestion,
+              questionNumber,
               detail: String(answer)
             };
             room.logs.push(wrongLog);
             saveRoom(room);
-            roomManageNamespace.emit("log", wrongLog);
+            manageNamespaceFor(room.id).emit("log", wrongLog);
           }
           socket.emit("stopRunning");
-          socket.data.isRunning = false;
-          socket.data.runningUntil = null;
+          player.isRunning = false;
+          player.runningUntil = null;
+          player.pendingSubmission = null;
           saveRoom(room);
         }, 900);
       }, room.runningTimeMs);
@@ -501,7 +538,7 @@ export const createWSServer = (base: ServerInstance) => {
       };
       room.logs.push(skipLog);
       saveRoom(room);
-      roomManageNamespace.emit("log", skipLog);
+      manageNamespaceFor(room.id).emit("log", skipLog);
 
       // Keep the same thinking-time delay as a submitted answer, so skipping
       // cannot be used to rush through questions.
@@ -509,7 +546,7 @@ export const createWSServer = (base: ServerInstance) => {
         if (socket.data.currentQuestion >= room.questions.length) {
           socket.data.finishingTime = Date.now();
           socket.emit("gameFinish");
-          roomManageNamespace.emit("alert", "info", `${socket.data.name} has finished (skipped last question)`);
+          manageNamespaceFor(room.id).emit("alert", "info", `${socket.data.name} has finished (skipped last question)`);
           const finishLog: LogEntry = {
             timestamp: Date.now(),
             playerName: socket.data.name || "Unknown",
@@ -518,8 +555,8 @@ export const createWSServer = (base: ServerInstance) => {
           };
           room.logs.push(finishLog);
           saveRoom(room);
-          roomManageNamespace.emit("log", finishLog);
-          roomManageNamespace.emit("leaderboard", buildLeaderboard(room));
+          manageNamespaceFor(room.id).emit("log", finishLog);
+          manageNamespaceFor(room.id).emit("leaderboard", buildLeaderboard(room));
         } else {
           socket.data.currentQuestion++;
           saveRoom(room);
@@ -558,7 +595,7 @@ export const createWSServer = (base: ServerInstance) => {
       if (room.chat.length > 200) room.chat = room.chat.slice(-200);
       saveRoom(room);
       socket.nsp.emit("chatMessage", message);
-      roomManageNamespace.emit("chatMessage", message);
+      manageNamespaceFor(room.id).emit("chatMessage", message);
     });
     socket.on("visibilityChange", async (hidden) => {
       if (!room.visibilityTracking || room.state !== "started" || !socket.data.name) return;
@@ -575,8 +612,8 @@ export const createWSServer = (base: ServerInstance) => {
         };
         room.logs.push(log);
         saveRoom(room);
-        roomManageNamespace.emit("log", log);
-        roomManageNamespace.emit("playerData", getPlayers(room));
+        manageNamespaceFor(room.id).emit("log", log);
+        manageNamespaceFor(room.id).emit("playerData", getPlayers(room));
       } else if (!hidden && socket.data.awaySince) {
         const awayMs = Date.now() - socket.data.awaySince;
         socket.data.awaySince = null;
@@ -589,7 +626,7 @@ export const createWSServer = (base: ServerInstance) => {
         };
         room.logs.push(log);
         saveRoom(room);
-        roomManageNamespace.emit("log", log);
+        manageNamespaceFor(room.id).emit("log", log);
         socket.emit(
           "alert",
           "info",
@@ -732,7 +769,11 @@ function matchesSolution(
   solution: z.infer<typeof Question>["solutions"][number],
   question: z.infer<typeof Question>
 ) {
-  if (solution.type === "number") return Number(guess) === solution.value;
+  if (solution.type === "number") {
+    if (typeof guess === "string" && guess.trim() === "") return false;
+    const value = Number(guess);
+    return Number.isFinite(value) && value === solution.value;
+  }
   if (solution.type === "text") return String(guess).trim().toLowerCase() === solution.value.trim().toLowerCase();
   if (!question.allowEquivalent) return String(guess).trim() === solution.value;
   try {
@@ -742,7 +783,7 @@ function matchesSolution(
   }
 }
 
-function checkSolution(guess: string | number | (string | number)[], question: z.infer<typeof Question>) {
+export function checkSolution(guess: string | number | (string | number)[], question: z.infer<typeof Question>) {
   if (!question.requireAllSolutionGroups) {
     const answer = Array.isArray(guess) ? guess[0] : guess;
     return question.solutions.some((solution) => matchesSolution(answer, solution, question));
@@ -762,17 +803,30 @@ function checkSolution(guess: string | number | (string | number)[], question: z
     );
   }
 
-  const usedGroups = new Set<number>();
-  function matchAnswer(index: number): boolean {
-    if (index === answers.length) return true;
-    for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
-      if (usedGroups.has(groupIndex)) continue;
-      if (!groups[groupIndex].some((solution) => matchesSolution(answers[index], solution, question))) continue;
-      usedGroups.add(groupIndex);
-      if (matchAnswer(index + 1)) return true;
-      usedGroups.delete(groupIndex);
+  // Match answers to groups with augmenting-path bipartite matching. The
+  // previous recursive search explored permutations, so repeated values that
+  // matched every group could force factorial work from one submission.
+  const groupToAnswer = new Array<number>(groups.length).fill(-1);
+  const edges = answers.map((answer) =>
+    groups.flatMap((solutions, groupIndex) =>
+      solutions.some((solution) => matchesSolution(answer, solution, question)) ? [groupIndex] : []
+    )
+  );
+
+  function assign(answerIndex: number, seen: boolean[]): boolean {
+    for (const groupIndex of edges[answerIndex]) {
+      if (seen[groupIndex]) continue;
+      seen[groupIndex] = true;
+      if (groupToAnswer[groupIndex] === -1 || assign(groupToAnswer[groupIndex], seen)) {
+        groupToAnswer[groupIndex] = answerIndex;
+        return true;
+      }
     }
     return false;
   }
-  return matchAnswer(0);
+
+  for (let answerIndex = 0; answerIndex < answers.length; answerIndex++) {
+    if (!assign(answerIndex, new Array<boolean>(groups.length).fill(false))) return false;
+  }
+  return true;
 }

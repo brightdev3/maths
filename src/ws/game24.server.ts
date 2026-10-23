@@ -22,7 +22,8 @@ import {
 import { generatePuzzleFor, verifyMoves } from "../lib/game24/engine";
 
 type AnyServer = Server<any, any, any, any>;
-type Game24Socket = Socket<  Game24ClientToServerEvents,
+type Game24Socket = Socket<
+  Game24ClientToServerEvents,
   Game24ServerToClientEvents,
   Game24InterServerEvents,
   Game24SocketData
@@ -54,6 +55,17 @@ function verifyPassword(password: string, stored: string): boolean {
   }
 }
 
+function newReconnectToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+function reconnectTokensEqual(value: string | undefined, expected: string): boolean {
+  if (!value || !expected) return false;
+  const actual = Buffer.from(value);
+  const wanted = Buffer.from(expected);
+  return actual.length === wanted.length && timingSafeEqual(actual, wanted);
+}
+
 export function registerGame24Server(io: AnyServer): void {
   const rooms = new Map<string, Game24Room>();
   const roundTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -63,7 +75,8 @@ export function registerGame24Server(io: AnyServer): void {
   const autoAdvanceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const online = new Map<string, { playerId: string | null; name: string | null; roomCode: string | null }>();
 
-  const ns: Namespace<    Game24ClientToServerEvents,
+  const ns: Namespace<
+    Game24ClientToServerEvents,
     Game24ServerToClientEvents,
     Game24InterServerEvents,
     Game24SocketData
@@ -98,7 +111,7 @@ export function registerGame24Server(io: AnyServer): void {
   }
 
   function currentRoom(socket: Game24Socket): Game24Room | null {
-    return socket.data.roomCode ? rooms.get(socket.data.roomCode) ?? null : null;
+    return socket.data.roomCode ? (rooms.get(socket.data.roomCode) ?? null) : null;
   }
 
   function summary(room: Game24Room): Game24RoomSummary {
@@ -379,10 +392,15 @@ export function registerGame24Server(io: AnyServer): void {
     online.set(socket.id, { playerId: null, name: null, roomCode: null });
     broadcastLobby();
 
-    const reject = (ack: OperationAck, error: string) => ack?.({ ok: false, error });
-    const accept = (ack: OperationAck) => ack?.({ ok: true });
+    const reject = (ack: OperationAck, error: string) => {
+      if (typeof ack === "function") ack({ ok: false, error });
+    };
+    const accept = (ack: OperationAck) => {
+      if (typeof ack === "function") ack({ ok: true });
+    };
 
     socket.on("createRoom", (rawInput, ack) => {
+      if (typeof ack !== "function") return;
       const input = CreateGame24RoomInput.safeParse(rawInput);
       if (!input.success) return ack?.({ ok: false, error: input.error.issues[0]?.message || "Invalid room settings" });
       if (input.data.visibility === "password" && !input.data.password) {
@@ -394,8 +412,10 @@ export function registerGame24Server(io: AnyServer): void {
       while (rooms.has(code));
 
       const now = Date.now();
+      const ownerReconnectToken = newReconnectToken();
       const owner: Game24Player = {
         id: input.data.playerId,
+        reconnectToken: ownerReconnectToken,
         name: input.data.playerName,
         connected: true,
         totalTimeMs: 0,
@@ -432,12 +452,13 @@ export function registerGame24Server(io: AnyServer): void {
       };
       rooms.set(code, room);
       enterRoom(socket, room, owner.id, owner.name);
-      ack?.({ ok: true, code });
+      ack?.({ ok: true, code, reconnectToken: ownerReconnectToken });
       broadcastRoom(room);
       broadcastLobby();
     });
 
     socket.on("joinRoom", (rawInput, ack) => {
+      if (typeof ack !== "function") return;
       const input = JoinGame24RoomInput.safeParse(rawInput);
       if (!input.success) return ack?.({ ok: false, error: "Invalid join request" });
       const room = rooms.get(input.data.code);
@@ -445,9 +466,12 @@ export function registerGame24Server(io: AnyServer): void {
 
       const existing = room.players.get(input.data.playerId);
       if (existing) {
+        if (!reconnectTokensEqual(input.data.reconnectToken, existing.reconnectToken)) {
+          return ack?.({ ok: false, error: "That player is already in this room" });
+        }
         existing.connected = true;
         enterRoom(socket, room, existing.id, existing.name);
-        ack?.({ ok: true, code: room.code });
+        ack?.({ ok: true, code: room.code, reconnectToken: existing.reconnectToken });
         broadcastRoom(room);
         broadcastLobby();
         return;
@@ -463,8 +487,10 @@ export function registerGame24Server(io: AnyServer): void {
       );
       if (duplicate) return ack?.({ ok: false, error: "That name is already in use" });
 
+      const playerReconnectToken = newReconnectToken();
       const player: Game24Player = {
         id: input.data.playerId,
+        reconnectToken: playerReconnectToken,
         name: input.data.playerName,
         connected: true,
         totalTimeMs: 0,
@@ -477,7 +503,7 @@ export function registerGame24Server(io: AnyServer): void {
       };
       room.players.set(player.id, player);
       enterRoom(socket, room, player.id, player.name);
-      ack?.({ ok: true, code: room.code });
+      ack?.({ ok: true, code: room.code, reconnectToken: playerReconnectToken });
 
       // 1v1 begins the moment an opponent accepts.
       if (room.format === "1v1" && room.players.size >= 2) startGame(room);
@@ -667,8 +693,10 @@ export function registerGame24Server(io: AnyServer): void {
         return reject(ack, "That does not make 24");
       }
 
+      const elapsedMs =
+        room.roundStartedAt === null ? 0 : Math.min(Math.max(0, Date.now() - room.roundStartedAt), room.roundTimeMs);
       if (room.mode === "time") {
-        player.roundTimeMs = Math.min(Math.max(0, input.data.elapsedMs), room.roundTimeMs);
+        player.roundTimeMs = elapsedMs;
         player.solvedThisRound = true;
         player.totalTimeMs += player.roundTimeMs;
         const contenders = [...room.players.values()].filter((candidate) => candidate.connected);
@@ -677,7 +705,7 @@ export function registerGame24Server(io: AnyServer): void {
       } else {
         player.solvedThisRound = true;
         player.score += 1;
-        player.roundTimeMs = Math.min(Math.max(0, input.data.elapsedMs), HIT_WINDOW_MS);
+        player.roundTimeMs = Math.min(elapsedMs, HIT_WINDOW_MS);
         endRound(room);
       }
       accept(ack);

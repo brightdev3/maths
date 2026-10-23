@@ -1,9 +1,12 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scrypt, scryptSync, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import { Database } from "bun:sqlite";
 
 import type { PhysicalCompetition, PhysicalTeam } from "./physical.schemas";
+
+const scryptAsync = promisify(scrypt) as (password: string, salt: Buffer, keylen: number) => Promise<Buffer>;
 
 type StoredPhysicalCompetition = Omit<PhysicalCompetition, "teams"> & { teams: [string, PhysicalTeam][] };
 
@@ -13,12 +16,12 @@ export function hashMarkerPin(pin: string): string {
   return `${salt.toString("hex")}:${digest.toString("hex")}`;
 }
 
-export function verifyMarkerPin(pin: string, storedHash: string): boolean {
+export async function verifyMarkerPin(pin: string, storedHash: string): Promise<boolean> {
   const [saltHex, digestHex, extra] = storedHash.split(":");
   if (!saltHex || !digestHex || extra) return false;
   try {
     const expected = Buffer.from(digestHex, "hex");
-    const actual = scryptSync(pin, Buffer.from(saltHex, "hex"), expected.length);
+    const actual = await scryptAsync(pin, Buffer.from(saltHex, "hex"), expected.length);
     return expected.length > 0 && timingSafeEqual(actual, expected);
   } catch {
     return false;
