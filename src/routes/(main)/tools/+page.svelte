@@ -5,7 +5,6 @@
     name: string;
     description: string;
     url: string;
-    tag: string;
     icon: typeof Gamepad2;
   }
 
@@ -14,35 +13,30 @@
       name: "Digitle",
       description: "Guess a five-digit number in six attempts, with colour-coded feedback after every move.",
       url: "/tools/digitle",
-      tag: "Daily puzzle",
       icon: Gamepad2
     },
     {
       name: "Basic Facts",
       description: "Sixty seconds of arithmetic, multiplication, powers and roots against the clock.",
       url: "/tools/basic-facts",
-      tag: "Timed drill",
       icon: Zap
     },
     {
       name: "Sequencing",
       description: "Read increasingly devious number patterns and choose the value that comes next.",
       url: "/tools/sequencing",
-      tag: "Pattern hunt",
       icon: Brain
     },
     {
       name: "Factor Finder",
       description: "Test your divisibility instincts by finding every factor of the target number.",
       url: "/tools/factor-finder",
-      tag: "Divisibility",
       icon: CircleDot
     },
     {
       name: "24 Game",
       description: "Combine four numbers with +, −, × and ÷ to make exactly 24 — solo or against friends.",
       url: "/tools/24-game",
-      tag: "Arithmetic",
       icon: Calculator
     }
   ];
@@ -52,14 +46,12 @@
       name: "Mathex Set Editor",
       description: "Write and arrange question sets for a Mathex round, with live collaboration.",
       url: "/mathex/app/create/editor",
-      tag: "Authoring",
       icon: Pencil
     },
     {
       name: "Mathex Live Dashboard",
       description: "Score a physical Mathex competition in real time and project the standings.",
       url: "/mathex/app/live",
-      tag: "Scorekeeping",
       icon: Radio
     }
   ];
@@ -71,7 +63,6 @@
       class="flex flex-col gap-5 border-b-2 border-foreground/85 pb-8 sm:flex-row sm:items-end sm:justify-between"
     >
       <div>
-        <p class="mathex-kicker">The cabinet</p>
         <h1 class="mt-3 font-display text-5xl font-bold sm:text-6xl">Tools</h1>
       </div>
       <p class="max-w-sm text-sm leading-6 text-muted-foreground">
@@ -95,9 +86,6 @@
               <h2 class="font-display text-xl font-bold leading-snug transition-colors group-hover:text-primary">
                 {entry.name}
               </h2>
-              <span class="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                {entry.tag}
-              </span>
             </div>
             <p class="mt-1.5 max-w-2xl text-sm leading-6 text-muted-foreground">{entry.description}</p>
           </div>

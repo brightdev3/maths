@@ -4,21 +4,18 @@
 
   const destinations = [
     {
-      index: "01",
       href: "/utilities/number",
       title: "Number explorer",
       blurb: "Pull apart any number to see its factors, patterns and surprising properties.",
       action: "Investigate a number"
     },
     {
-      index: "02",
       href: "/tools",
       title: "Games with bite",
       blurb: "Digitle, 24 Game, Basic Facts and more — puzzles that reward pattern-spotting and nerve.",
       action: "Pick a game"
     },
     {
-      index: "03",
       href: "/mathex",
       title: "Live Mathex",
       blurb: "Host or join a real-time mathematics competition, scored as it happens.",
@@ -31,13 +28,12 @@
   <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <div class="grid lg:grid-cols-[1.15fr_0.85fr]">
       <div class="py-12 sm:py-16 lg:border-r lg:border-border lg:py-20 lg:pr-14">
-        <p class="mathex-kicker">Tiger Maths · For curious minds</p>
+        <p class="mathex-kicker">Mathematics to linger over</p>
         <h1 class="mt-5 max-w-3xl font-display text-5xl font-bold leading-[0.98] sm:text-7xl lg:text-8xl">
-          Mathematics,<br />worth lingering over.
+          Tiger Maths
         </h1>
         <p class="mt-8 max-w-lg text-base leading-7 text-muted-foreground sm:text-lg">
-          Explore interesting number facts, play games built around quick thinking, and put your accuracy to the test in
-          a live Mathex round.
+          Explore interesting number facts, play fun maths games, and participate in a live Mathex round.
         </p>
         <div class="mt-8 flex flex-col gap-3 sm:flex-row">
           <Button href="/utilities/number" size="lg" class="gap-2">
@@ -49,7 +45,7 @@
             Open Mathex
           </Button>
         </div>
-        <p class="mt-6 text-xs font-medium text-muted-foreground">No accounts needed. Free software under the GPLv3.</p>
+        <p class="mt-6 text-xs font-medium text-muted-foreground">Free and open-source under the GPLv3.</p>
       </div>
 
       <aside class="border-t border-border py-12 lg:border-t-0 lg:pl-12 lg:py-20">
@@ -58,7 +54,7 @@
           <figcaption>
             <div class="flex items-baseline justify-between border-b border-border px-4 py-3">
               <span class="font-mono text-xs font-semibold uppercase tracking-[0.18em]">Pi</span>
-              <span class="font-mono text-[0.68rem] text-muted-foreground">Irrational · Transcendental</span>
+              <span class="font-mono text-[0.68rem] text-muted-foreground">Irrational & Transcendental</span>
             </div>
           </figcaption>
           <div class="px-4 pb-4 pt-6">
@@ -79,9 +75,8 @@
       {#each destinations as destination}
         <a
           href={destination.href}
-          class="group grid grid-cols-[2.5rem_1fr_auto] items-baseline gap-x-4 border-b border-border py-6 transition-colors hover:bg-accent/70 sm:gap-x-8 sm:py-7"
+          class="group grid grid-cols-[1fr_auto] items-baseline gap-x-4 border-b border-border px-4 py-6 transition-colors hover:bg-accent/70 sm:gap-x-8 sm:px-6 sm:py-7"
         >
-          <span class="mathex-index pt-1 group-hover:text-primary">{destination.index}</span>
           <div>
             <h2 class="font-display text-2xl font-bold leading-snug transition-colors group-hover:text-primary">
               {destination.title}
