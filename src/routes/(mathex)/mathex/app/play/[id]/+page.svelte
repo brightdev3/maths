@@ -11,6 +11,7 @@
     Question
   } from "$lib/mathex/schemas";
   import { createId, msToMinutesAndSeconds } from "$lib/utils";
+  import { playerPoints } from "$lib/mathex/scoring";
 
   import Identicon from "$lib/components/Identicon.svelte";
   import { Input } from "$lib/components/ui/input";
@@ -352,9 +353,13 @@
     </div>
     <span class="truncate text-sm font-medium {self ? 'text-primary' : ''}">{entry.name}</span>
     <span class="ml-auto shrink-0 text-xs text-muted-foreground">
-      {entry.totalMs !== null ? msToMinutesAndSeconds(entry.totalMs) : "DNF"} &middot; {entry.questionsCompleted}/{entry.totalQuestions}
+      {@render points(entry)}
     </span>
   </div>
+{/snippet}
+
+{#snippet points(entry: LeaderboardEntry)}
+  <span class="font-bold tabular-nums">{playerPoints(entry)}</span> pts
 {/snippet}
 
 <div class="mathex-shell min-h-screen p-4 sm:p-6">
@@ -698,8 +703,7 @@
             <div class="mt-5 flex items-center gap-3 border border-border bg-muted/40 px-4 py-3">
               <span class="font-display text-2xl font-bold leading-none text-primary">#{myEntry.rank}</span>
               <span class="text-sm text-muted-foreground">
-                {myEntry.totalMs !== null ? msToMinutesAndSeconds(myEntry.totalMs) : "DNF"} &middot;
-                {myEntry.questionsCompleted}/{myEntry.totalQuestions} correct
+                {@render points(myEntry)}
               </span>
             </div>
           {/if}
@@ -724,7 +728,7 @@
                   >{entry.name}</span
                 >
                 <span class="ml-auto shrink-0 text-xs text-muted-foreground">
-                  {entry.totalMs !== null ? msToMinutesAndSeconds(entry.totalMs) : "DNF"} &middot; {entry.questionsCompleted}/{entry.totalQuestions}
+                  {@render points(entry)}
                 </span>
               </div>
             {/each}
