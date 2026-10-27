@@ -8,6 +8,8 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { toast } from "svelte-sonner";
   import { CHAT_DISCLAIMER, dismissChatDisclaimer, hasDismissedChatDisclaimer } from "$lib/mathex/chat-disclaimer";
+  import FairPlayOptions from "$lib/mathex/FairPlayOptions.svelte";
+  import { DEFAULT_FAIR_PLAY_SETTINGS, type FairPlaySettings } from "$lib/mathex/fair-play";
 
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Clock3 from "@lucide/svelte/icons/clock-3";
@@ -56,6 +58,7 @@
   let dragOver = $state(false);
   let runningTime = $state(16);
   let visibilityTracking = $state(false);
+  let fairPlaySettings: FairPlaySettings = $state({ ...DEFAULT_FAIR_PLAY_SETTINGS });
   let showExtraOptions = $state(false);
   let gameTimerMinutes = $state(0);
   let endOnPerfectScore = $state(false);
@@ -251,6 +254,7 @@
     try {
       const settings: RoomSettings = {
         ...DEFAULT_ROOM_SETTINGS,
+        ...fairPlaySettings,
         gameTimerMs: gameTimerMinutes > 0 ? Math.round(gameTimerMinutes * 60000) : null,
         endOnPerfectScore,
         allowLateJoin,
@@ -560,6 +564,14 @@
               </div>
             </div>
 
+            <div class="border border-border/70 bg-muted/30 p-3.5">
+              <FairPlayOptions
+                settings={fairPlaySettings}
+                onChange={(partial) => (fairPlaySettings = { ...fairPlaySettings, ...partial })}
+                idPrefix="create-fair-play"
+              />
+            </div>
+
             <div class="border border-border/70">
               <button
                 type="button"
@@ -668,7 +680,7 @@
                           <div>
                             <Label for="allow-chat" class="cursor-pointer text-sm font-semibold">Player chat</Label>
                             <p class="mt-1 text-xs leading-5 text-muted-foreground">
-                              Players can message each other during the game.
+                              Players can message each other before, during and after the game.
                             </p>
                           </div>
                         </div>

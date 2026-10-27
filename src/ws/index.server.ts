@@ -32,6 +32,7 @@ import { z } from "zod";
 import { randomBytes, randomInt } from "crypto";
 import { create, all } from "mathjs";
 import { RoomStore } from "../lib/mathex/rooms.server";
+import { FAIR_PLAY_WARNING_LABELS, isFairPlayWarningEnabled, recordFairPlayWarning } from "../lib/mathex/fair-play";
 import { registerPhysicalCompetitionServer } from "./physical.server";
 import { registerSetShareServer } from "./set-share.server";
 import { registerCollaborativeSetServer } from "./collaborative-set.server";
@@ -211,6 +212,9 @@ export const createWSServer = (base: ServerInstance) => {
         "allowCalculator",
         "allowChat",
         "allowSketch",
+        "blockClipboard",
+        "protectQuestionContent",
+        "warnOnFocusLoss",
         "endOnPerfectScore"
       ] as const) {
         if (typeof partial[key] === "boolean") next[key] = partial[key];
@@ -330,6 +334,7 @@ export const createWSServer = (base: ServerInstance) => {
       pendingSubmission: null,
       awaySince: null,
       visibilityFlags: 0,
+      fairPlayWarnings: [],
       skips: 0,
       correctCount: 0
     };
@@ -403,7 +408,14 @@ export const createWSServer = (base: ServerInstance) => {
     });
     socket.on("answer", (answer) => {
       const player = socket.data;
-      if (!player.name || room.state !== "started" || player.isRunning) return;
+      if (
+        !player.name ||
+        room.state !== "started" ||
+        player.isRunning ||
+        player.finishingTime ||
+        room.players.get(player.playerId ?? "") !== player
+      )
+        return;
 
       const questionNumber = player.currentQuestion;
       const currentQuestion = room.questions[questionNumber - 1];
@@ -519,7 +531,14 @@ export const createWSServer = (base: ServerInstance) => {
       }, room.runningTimeMs);
     });
     socket.on("skip", () => {
-      if (!socket.data.name || room.state !== "started" || socket.data.isRunning) return;
+      if (
+        !socket.data.name ||
+        room.state !== "started" ||
+        socket.data.isRunning ||
+        socket.data.finishingTime ||
+        room.players.get(socket.data.playerId ?? "") !== socket.data
+      )
+        return;
       if (socket.data.currentQuestion > room.questions.length) return;
 
       const currentQuestion = room.questions[socket.data.currentQuestion - 1];
@@ -598,8 +617,41 @@ export const createWSServer = (base: ServerInstance) => {
       socket.nsp.emit("chatMessage", message);
       manageNamespaceFor(room.id).emit("chatMessage", message);
     });
+    socket.on("fairPlayWarning", (kind) => {
+      const player = socket.data;
+      if (
+        !player.name ||
+        room.players.get(player.playerId ?? "") !== player ||
+        room.state !== "started" ||
+        player.finishingTime ||
+        !isFairPlayWarningEnabled(room.settings, kind)
+      )
+        return;
+      const warnings = (player.fairPlayWarnings ??= []);
+      const now = Date.now();
+      if (!recordFairPlayWarning(warnings, kind, player.currentQuestion, now)) return;
+      const log: LogEntry = {
+        timestamp: now,
+        playerName: player.name,
+        type: "warning",
+        questionNumber: player.currentQuestion,
+        detail: FAIR_PLAY_WARNING_LABELS[kind]
+      };
+      room.logs.push(log);
+      saveRoom(room);
+      manageNamespaceFor(room.id).emit("log", log);
+      manageNamespaceFor(room.id).emit("playerData", getPlayers(room));
+    });
     socket.on("visibilityChange", async (hidden) => {
-      if (!room.visibilityTracking || room.state !== "started" || !socket.data.name) return;
+      if (
+        typeof hidden !== "boolean" ||
+        !room.visibilityTracking ||
+        room.state !== "started" ||
+        !socket.data.name ||
+        socket.data.finishingTime ||
+        room.players.get(socket.data.playerId ?? "") !== socket.data
+      )
+        return;
 
       if (hidden && !socket.data.awaySince) {
         socket.data.awaySince = Date.now();
@@ -691,6 +743,9 @@ export const createWSServer = (base: ServerInstance) => {
       allowCalculator: settings?.allowCalculator !== false,
       allowChat: settings?.allowChat === true,
       allowSketch: settings?.allowSketch !== false,
+      blockClipboard: settings?.blockClipboard === true,
+      protectQuestionContent: settings?.protectQuestionContent === true,
+      warnOnFocusLoss: settings?.warnOnFocusLoss === true,
       gameTimerMs:
         Number.isFinite(timerMs) && timerMs > 0 ? Math.min(Math.max(Math.round(timerMs), 30000), 8 * 3600000) : null,
       endOnPerfectScore: settings?.endOnPerfectScore === true

@@ -14,6 +14,10 @@ Alternatively, you could use the `Dockerfile`/`docker-compose.yml`:
 docker-compose up --build
 ```
 
+## Mathex fair play
+
+For Mathex's optional browser restrictions and host activity warnings, see [fair play controls](docs/mathex-fair-play.md).
+
 ## Legacy browser support
 
 Tailwind CSS v4 targets 2023-era browsers, so in addition to the regular Tailwind v4 bundle the site

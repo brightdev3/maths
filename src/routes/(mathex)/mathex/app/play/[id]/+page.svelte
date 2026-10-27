@@ -12,6 +12,8 @@
   } from "$lib/mathex/schemas";
   import { createId, msToMinutesAndSeconds } from "$lib/utils";
   import { playerPoints } from "$lib/mathex/scoring";
+  import { installFairPlayControls } from "$lib/mathex/fair-play-client";
+  import { FAIR_PLAY_WARNING_LABELS } from "$lib/mathex/fair-play";
 
   import Identicon from "$lib/components/Identicon.svelte";
   import { Input } from "$lib/components/ui/input";
@@ -202,6 +204,17 @@
   socket.on("roomSettings", (settings) => (roomSettings = settings));
   let visibilityTracking = $state(false);
   socket.on("visibilityTracking", (enabled) => (visibilityTracking = enabled));
+  $effect(() => {
+    if (gameState !== "started" || !roomSettings) return;
+    return installFairPlayControls(
+      roomSettings,
+      (kind) => {
+        // Do not queue stale activity to be delivered after reconnecting or finishing.
+        if (socket.connected) socket.volatile.emit("fairPlayWarning", kind);
+      },
+      (kind) => toast.warning(`${FAIR_PLAY_WARNING_LABELS[kind]}. Activity warnings are shared with the host.`)
+    );
+  });
   let endsAt: number | null = $state(null);
   socket.on("gameEndsAt", (deadline) => (endsAt = deadline));
   let endsInMs = $derived.by(() => {
@@ -441,6 +454,29 @@
       </p>
     </div>
   {/if}
+  {#if roomSettings && (roomSettings.blockClipboard || roomSettings.protectQuestionContent || roomSettings.warnOnFocusLoss) && (gameState === "waiting_start" || gameState === "started")}
+    <div class="mathex-panel mx-auto mb-4 max-w-5xl px-4 py-3 text-sm" role="status">
+      <p class="flex items-center gap-2 font-bold">
+        <ShieldCheck class="h-4 w-4 text-primary" /> Fair play controls enabled
+      </p>
+      <ul class="mt-2 list-inside list-disc space-y-1 text-xs text-muted-foreground">
+        {#if roomSettings.blockClipboard}
+          <li>During play, copying/cutting questions and pasting/dropping answers are blocked. Chat is unaffected.</li>
+        {/if}
+        {#if roomSettings.protectQuestionContent}
+          <li>During play, question selection, context menus and dragging are restricted.</li>
+        {/if}
+        {#if roomSettings.warnOnFocusLoss}
+          <li>Losing focus while the game tab is visible is reported. Browser dialogs can also trigger this.</li>
+        {/if}
+      </ul>
+      <p class="mt-2 text-xs text-muted-foreground">
+        Activity warnings include the action, time and question number, not clipboard contents. They are shared only
+        with the host, separate from tab-leaving flags, and do not affect your score. Tell the host if a restriction
+        affects assistive tools you need.
+      </p>
+    </div>
+  {/if}
   {#if gameState === "connecting"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
       <span class="mathex-panel flex items-center gap-3 px-5 py-4 text-lg font-medium text-muted-foreground">
@@ -630,10 +666,15 @@
               >
                 <Flag class="h-3.5 w-3.5" /> Problem {currentQuestion.number}
               </div>
-              <div class="question-content prose prose-stone max-w-none dark:prose-invert">
+              <div
+                data-fair-play-question
+                class:question-protected={roomSettings?.protectQuestionContent === true}
+                class="question-content prose prose-stone max-w-none dark:prose-invert"
+              >
                 {@html renderMath(currentQuestion.content)}
               </div>
               <form
+                data-fair-play-answers
                 class="mt-6 border-t border-border pt-6"
                 onsubmit={(e) => {
                   e.preventDefault();
@@ -725,6 +766,7 @@
       onclose={() => (sketchOpen = false)}
       mode="mathex"
       question={currentQuestion.content}
+      protectQuestionContent={roomSettings?.protectQuestionContent === true}
       answerType={sketchAnswerType}
       onanswersubmit={submitSketchAnswer}
     />
@@ -804,6 +846,13 @@
 </div>
 
 <style>
+  .question-protected,
+  .question-protected :global(*) {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
   .question-content :global(img) {
     max-width: 100%;
     max-height: 32rem;

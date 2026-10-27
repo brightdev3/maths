@@ -36,6 +36,7 @@
     onclose = () => {},
     mode = "tool",
     question = "",
+    protectQuestionContent = false,
     answerType = null,
     onanswersubmit = undefined
   }: {
@@ -43,6 +44,7 @@
     onclose?: () => void;
     mode?: "tool" | "mathex";
     question?: string;
+    protectQuestionContent?: boolean;
     answerType?: AnswerType | null;
     onanswersubmit?: (answer: string | number) => void;
   } = $props();
@@ -1742,11 +1744,18 @@
         : 'pointer-events-none'} absolute top-4 left-4 max-h-[45vh] w-[min(30rem,calc(100vw-2rem))] overflow-auto rounded-md border border-border bg-card/90 p-4 shadow-sm"
     >
       <p class="mb-2 text-[0.65rem] font-bold tracking-[0.16em] text-primary uppercase">Question</p>
-      <div class="prose prose-stone max-w-none text-sm dark:prose-invert">
+      <div
+        data-fair-play-question={mode === "mathex" ? "" : undefined}
+        class="prose prose-stone max-w-none text-sm dark:prose-invert"
+        style:user-select={protectQuestionContent ? "none" : undefined}
+        style:-webkit-user-select={protectQuestionContent ? "none" : undefined}
+        style:-webkit-touch-callout={protectQuestionContent ? "none" : undefined}
+      >
         {@html renderMath(question)}
       </div>
       {#if tool === "interact"}
         <form
+          data-fair-play-answers={mode === "mathex" ? "" : undefined}
           class="mt-4 flex flex-col gap-2 border-t border-border pt-3"
           onsubmit={(event) => {
             event.preventDefault();

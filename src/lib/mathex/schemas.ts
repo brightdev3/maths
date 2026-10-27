@@ -1,5 +1,11 @@
 import { z } from "zod";
 import type { ToastT } from "svelte-sonner";
+import {
+  DEFAULT_FAIR_PLAY_SETTINGS,
+  type FairPlaySettings,
+  type FairPlayWarningKind,
+  type FairPlayWarningSummary
+} from "./fair-play";
 
 export const RoomName = z
   .string()
@@ -43,6 +49,7 @@ export interface RoomClientToServerEvents {
   answer: (value: string | number | (string | number)[]) => void;
   skip: () => void;
   visibilityChange: (hidden: boolean) => void;
+  fairPlayWarning: (kind: FairPlayWarningKind) => void;
   sendChat: (text: string) => void;
 }
 
@@ -61,6 +68,8 @@ export interface RoomSocketData {
   pendingSubmission?: string | null;
   awaySince: number | null;
   visibilityFlags: number;
+  /** Host-only activity warnings, separate from visibility flags and scores. */
+  fairPlayWarnings?: FairPlayWarningSummary[];
   skips: number;
   correctCount: number;
 }
@@ -70,7 +79,7 @@ export type LogVerbosity = "all" | "submissions" | "finished";
 export interface LogEntry {
   timestamp: number;
   playerName: string;
-  type: "submitted" | "running" | "correct" | "wrong" | "finished" | "visibility" | "skipped" | "kicked";
+  type: "submitted" | "running" | "correct" | "wrong" | "finished" | "visibility" | "skipped" | "kicked" | "warning";
   questionNumber: number;
   detail?: string;
 }
@@ -200,7 +209,7 @@ export const QuestionSet = z.object({
 
 export type RoomState = "lobby" | "started" | "finished";
 
-export interface RoomSettings {
+export interface RoomSettings extends FairPlaySettings {
   allowLateJoin: boolean;
   showLeaderboard: boolean;
   allowCalculator: boolean;
@@ -212,6 +221,7 @@ export interface RoomSettings {
 }
 
 export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
+  ...DEFAULT_FAIR_PLAY_SETTINGS,
   allowLateJoin: true,
   showLeaderboard: true,
   allowCalculator: true,

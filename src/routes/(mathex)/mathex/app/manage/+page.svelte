@@ -24,6 +24,8 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { CHAT_DISCLAIMER, dismissChatDisclaimer, hasDismissedChatDisclaimer } from "$lib/mathex/chat-disclaimer";
   import Identicon from "$lib/components/Identicon.svelte";
+  import FairPlayOptions from "$lib/mathex/FairPlayOptions.svelte";
+  import { FAIR_PLAY_WARNING_LABELS } from "$lib/mathex/fair-play";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Copy from "@lucide/svelte/icons/copy";
@@ -207,7 +209,12 @@
       );
     if (verbosity === "finished")
       return logs.filter(
-        (l) => l.type === "finished" || l.type === "correct" || l.type === "wrong" || l.type === "visibility"
+        (l) =>
+          l.type === "finished" ||
+          l.type === "correct" ||
+          l.type === "wrong" ||
+          l.type === "visibility" ||
+          l.type === "warning"
       );
     return logs;
   });
@@ -367,13 +374,15 @@
     <div
       class="flex gap-2 py-0.5 {log.type === 'correct'
         ? 'text-secondary'
-        : log.type === 'wrong'
-          ? 'text-red-600 dark:text-red-400'
-          : log.type === 'skipped'
-            ? 'text-primary'
-            : log.type === 'finished'
-              ? 'text-yellow-600 dark:text-yellow-400 font-bold'
-              : 'text-muted-foreground'}"
+        : log.type === 'warning'
+          ? 'text-amber-700 dark:text-amber-400'
+          : log.type === 'wrong'
+            ? 'text-red-600 dark:text-red-400'
+            : log.type === 'skipped'
+              ? 'text-primary'
+              : log.type === 'finished'
+                ? 'text-yellow-600 dark:text-yellow-400 font-bold'
+                : 'text-muted-foreground'}"
     >
       <span class="shrink-0 text-muted-foreground/60">{new Date(log.timestamp).toLocaleTimeString()}</span>
       <span class="shrink-0 font-semibold">{log.playerName}</span>
@@ -392,6 +401,8 @@
           finished all questions
         {:else if log.type === "visibility"}
           {log.detail}
+        {:else if log.type === "warning"}
+          activity warning on Q{log.questionNumber}: {log.detail} (not proof of cheating)
         {:else}
           {log.type}
         {/if}
@@ -777,6 +788,11 @@
                 </div>
               </div>
             </div>
+            <FairPlayOptions
+              settings={roomSettings}
+              onChange={(partial) => socket.emit("updateSettings", partial)}
+              idPrefix={`manage-fair-play-${uid}`}
+            />
           </div>
         {:else}
           <p class="mt-3 text-sm text-muted-foreground">Loading game options…</p>
@@ -811,6 +827,27 @@
     >
       <UserX class="h-3.5 w-3.5" />
     </button>
+  {/if}
+{/snippet}
+
+{#snippet activityWarnings(player: RoomSocketData)}
+  {#if player.fairPlayWarnings?.length}
+    <details class="mt-2 rounded border border-amber-500/30 bg-amber-500/5 p-2 text-xs">
+      <summary class="cursor-pointer font-semibold text-amber-700 dark:text-amber-400">
+        {player.fairPlayWarnings.reduce((total, warning) => total + warning.count, 0)} activity warnings
+      </summary>
+      <p class="mt-2 text-muted-foreground">Review with the player. Not proof of cheating; no score penalty.</p>
+      <ul class="mt-2 space-y-1">
+        {#each player.fairPlayWarnings as warning}
+          <li>
+            <span class="font-medium">{FAIR_PLAY_WARNING_LABELS[warning.kind]} ×{warning.count}</span>
+            <span class="text-muted-foreground">
+              — latest Q{warning.questionNumber}, {new Date(warning.lastAt).toLocaleTimeString()}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    </details>
   {/if}
 {/snippet}
 
@@ -894,11 +931,12 @@
                   {#if player.visibilityFlags > 0}
                     <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
                       <TriangleAlert class="h-3.5 w-3.5" />
-                      {player.visibilityFlags}
+                      {player.visibilityFlags} tab flags
                     </span>
                   {/if}
                   {@render kickButton(player)}
                 </div>
+                {@render activityWarnings(player)}
                 {#if currentState === "started" || currentState === "finished"}
                   <div class="mt-1.5 flex items-center gap-2">
                     <Progress value={scoreProgress} class="h-2 flex-1" />
@@ -1136,7 +1174,7 @@
                                 {#if player.visibilityFlags > 0}
                                   <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
                                     <TriangleAlert class="h-3.5 w-3.5" />
-                                    {player.visibilityFlags}
+                                    {player.visibilityFlags} tab flags
                                   </span>
                                 {/if}
                                 {@render kickButton(player)}
@@ -1156,6 +1194,7 @@
                               </div>
                             {/if}
                           </div>
+                          {@render activityWarnings(player)}
                           {#if currentState === "started" || currentState === "finished"}
                             <div class="flex items-center gap-2">
                               <Progress value={scoreProgress} class="h-2 flex-1" />
