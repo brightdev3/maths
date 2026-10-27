@@ -36,6 +36,7 @@
   import CalculatorIcon from "@lucide/svelte/icons/calculator";
   import MessageCircle from "@lucide/svelte/icons/message-circle";
   import Send from "@lucide/svelte/icons/send";
+  import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Calculator from "$lib/mathex/Calculator.svelte";
   import SketchPad from "$lib/components/SketchPad.svelte";
@@ -199,6 +200,8 @@
 
   let roomSettings: RoomSettings | null = $state(null);
   socket.on("roomSettings", (settings) => (roomSettings = settings));
+  let visibilityTracking = $state(false);
+  socket.on("visibilityTracking", (enabled) => (visibilityTracking = enabled));
   let endsAt: number | null = $state(null);
   socket.on("gameEndsAt", (deadline) => (endsAt = deadline));
   let endsInMs = $derived.by(() => {
@@ -223,19 +226,28 @@
   let chatDraft = $state("");
   let chatUnread = $state(0);
   let chatScrollEl: HTMLDivElement | null = $state(null);
+  let chatVisible = $derived.by(() => {
+    return (
+      roomSettings?.allowChat === true &&
+      (gameState === "waiting_start" || gameState === "finished" || (gameState === "started" && sidePanel === "chat"))
+    );
+  });
   socket.on("chatHistory", (messages) => {
     chatMessages = messages.slice(-200);
   });
   socket.on("chatMessage", (message) => {
     chatMessages = [...chatMessages, message].slice(-200);
-    if (sidePanel !== "chat") chatUnread++;
+    if (!chatVisible) chatUnread++;
   });
   socket.on("chatDelete", (id) => {
     chatMessages = chatMessages.filter((message) => message.id !== id);
   });
   $effect(() => {
     chatMessages.length;
-    if (sidePanel === "chat" && chatScrollEl) chatScrollEl.scrollTop = chatScrollEl.scrollHeight;
+    if (chatVisible) {
+      chatUnread = 0;
+      if (chatScrollEl) chatScrollEl.scrollTop = chatScrollEl.scrollHeight;
+    }
   });
 
   function sendChat() {
@@ -362,7 +374,73 @@
   <span class="font-bold tabular-nums">{playerPoints(entry)}</span> pts
 {/snippet}
 
+{#snippet chatPanel()}
+  <div class="mathex-panel flex max-h-[32rem] flex-col p-5">
+    <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+      <MessageCircle class="h-3.5 w-3.5" /> Live chat
+    </div>
+    <div bind:this={chatScrollEl} class="mt-3 flex min-h-40 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
+      {#each chatMessages as message (message.id)}
+        {@const isHostMessage = message.name === "Host"}
+        <div
+          class="max-w-[85%] rounded-xl px-2.5 py-1.5 {isHostMessage
+            ? 'self-start border border-primary/40 bg-primary/10'
+            : message.name === name
+              ? 'self-end bg-primary/10'
+              : 'self-start bg-muted/60'}"
+        >
+          {#if message.name !== name || isHostMessage}
+            <p
+              class="flex items-center gap-1.5 text-[0.65rem] font-bold {isHostMessage
+                ? 'text-primary'
+                : 'text-muted-foreground'}"
+            >
+              {#if isHostMessage}
+                <span class="rounded bg-primary px-1 py-px text-[0.6rem] font-black tracking-wider text-white"
+                  >HOST</span
+                >
+              {:else}
+                {message.name}
+              {/if}
+            </p>
+          {/if}
+          <p class="text-sm break-words">{message.text}</p>
+        </div>
+      {:else}
+        <p class="text-sm text-muted-foreground">No messages yet. Say hi!</p>
+      {/each}
+    </div>
+    <form
+      class="mt-3 flex gap-2"
+      onsubmit={(e) => {
+        e.preventDefault();
+        sendChat();
+      }}
+    >
+      <Input
+        bind:value={chatDraft}
+        maxlength={500}
+        placeholder="Message everyone…"
+        aria-label="Chat message"
+        class="min-w-0 flex-1"
+      />
+      <Button type="submit" size="icon" aria-label="Send chat message" disabled={!chatDraft.trim()}>
+        <Send class="h-4 w-4" />
+      </Button>
+    </form>
+  </div>
+{/snippet}
+
 <div class="mathex-shell min-h-screen p-4 sm:p-6">
+  {#if visibilityTracking && (gameState === "waiting_start" || gameState === "started" || gameState === "finished")}
+    <div class="mathex-panel mx-auto mb-4 flex max-w-5xl items-start gap-3 px-4 py-3 text-sm" role="status">
+      <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+      <p>
+        <span class="font-bold">Fair play tracking is on.</span>
+        Leaving the game tab during play is recorded for the host.
+      </p>
+    </div>
+  {/if}
   {#if gameState === "connecting"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
       <span class="mathex-panel flex items-center gap-3 px-5 py-4 text-lg font-medium text-muted-foreground">
@@ -404,10 +482,15 @@
     </div>
   {:else if gameState === "waiting_start"}
     <div class="flex min-h-[calc(100vh-3rem)] flex-1 items-center justify-center">
-      <span class="mathex-panel flex items-center gap-3 px-5 py-4 text-lg font-medium text-muted-foreground">
-        <LoaderCircle class="h-5 w-5 animate-spin" />
-        Waiting for game to start...
-      </span>
+      <div class="w-full max-w-md space-y-4">
+        <div class="mathex-panel flex items-center gap-3 px-5 py-4 text-lg font-medium text-muted-foreground">
+          <LoaderCircle class="h-5 w-5 animate-spin" />
+          Waiting for game to start...
+        </div>
+        {#if roomSettings?.allowChat === true}
+          {@render chatPanel()}
+        {/if}
+      </div>
     </div>
   {:else if gameState === "started"}
     <div class="mx-auto w-full {sidePanel ? 'max-w-5xl' : 'max-w-3xl'}">
@@ -630,54 +713,7 @@
             {/if}
           </div>
         {:else if sidePanel === "chat" && roomSettings?.allowChat === true}
-          <div class="mathex-panel flex max-h-[32rem] flex-col p-5">
-            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
-              <MessageCircle class="h-3.5 w-3.5" /> Live chat
-            </div>
-            <div bind:this={chatScrollEl} class="mt-3 flex min-h-40 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
-              {#each chatMessages as message (message.id)}
-                {@const isHostMessage = message.name === "Host"}
-                <div
-                  class="max-w-[85%] rounded-xl px-2.5 py-1.5 {isHostMessage
-                    ? 'self-start border border-primary/40 bg-primary/10'
-                    : message.name === name
-                      ? 'self-end bg-primary/10'
-                      : 'self-start bg-muted/60'}"
-                >
-                  {#if message.name !== name || isHostMessage}
-                    <p
-                      class="flex items-center gap-1.5 text-[0.65rem] font-bold {isHostMessage
-                        ? 'text-primary'
-                        : 'text-muted-foreground'}"
-                    >
-                      {#if isHostMessage}
-                        <span class="rounded bg-primary px-1 py-px text-[0.6rem] font-black tracking-wider text-white"
-                          >HOST</span
-                        >
-                      {:else}
-                        {message.name}
-                      {/if}
-                    </p>
-                  {/if}
-                  <p class="text-sm break-words">{message.text}</p>
-                </div>
-              {:else}
-                <p class="text-sm text-muted-foreground">No messages yet. Say hi!</p>
-              {/each}
-            </div>
-            <form
-              class="mt-3 flex gap-2"
-              onsubmit={(e) => {
-                e.preventDefault();
-                sendChat();
-              }}
-            >
-              <Input bind:value={chatDraft} maxlength={500} placeholder="Message everyone…" class="flex-1" />
-              <Button type="submit" size="icon" aria-label="Send chat message" disabled={!chatDraft.trim()}>
-                <Send class="h-4 w-4" />
-              </Button>
-            </form>
-          </div>
+          {@render chatPanel()}
         {/if}
       </div>
     </div>
@@ -737,6 +773,11 @@
         <p class="mt-5 border-t border-border pt-4 text-sm leading-6 text-muted-foreground">
           The host may communicate more information to you via alerts. They will appear at the bottom right.
         </p>
+        {#if roomSettings?.allowChat === true}
+          <div class="mt-5">
+            {@render chatPanel()}
+          </div>
+        {/if}
       </div>
     </div>
   {:else if gameState === "kicked"}

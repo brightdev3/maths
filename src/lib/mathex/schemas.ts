@@ -15,6 +15,7 @@ export interface RoomServerToClientEvents {
   gameFinish: () => void;
   kicked: () => void;
   roomSettings: (settings: RoomSettings) => void;
+  visibilityTracking: (enabled: boolean) => void;
   gameEndsAt: (endsAt: number | null) => void;
   chatMessage: (message: ChatMessage) => void;
   chatHistory: (messages: ChatMessage[]) => void;

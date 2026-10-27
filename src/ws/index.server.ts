@@ -369,6 +369,7 @@ export const createWSServer = (base: ServerInstance) => {
       }
       io.of(`/manage-${room.id}`).emit("playerData", getPlayers(room));
       socket.emit("joined", socket.data.name!);
+      socket.emit("visibilityTracking", room.visibilityTracking);
       socket.emit("questionCount", room.questions.length);
       socket.emit("roomSettings", room.settings);
       socket.emit("gameEndsAt", room.endsAt);
