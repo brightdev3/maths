@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { appendStrokeSamples, traceStroke, type Point } from "./sketch-stroke";
   import { Button } from "$lib/components/ui/button";
   import { renderMath } from "$lib/mathex/content";
   import NumberAnswer from "$lib/mathex/answers/NumberAnswer.svelte";
@@ -49,8 +50,7 @@
     onanswersubmit?: (answer: string | number) => void;
   } = $props();
 
-  type Point = { x: number; y: number };
-  type Stroke = { id: string; points: Point[]; color: string; width: number };
+  type Stroke = { points: readonly Point[]; color: string; width: number };
   type TextBox = {
     id: string;
     x: number;
@@ -90,21 +90,25 @@
   const SNAP_DIST = 14;
 
   let canvas: HTMLCanvasElement | null = $state(null);
-  // Every stroke, textbox and shape is stored individually so they can be
-  // erased, moved, resized and re-edited after the fact.
-  let strokes: Stroke[] = $state([]);
+  // Finished strokes are immutable, so redraws and undo snapshots can reuse them.
+  let strokes: readonly Stroke[] = [];
+  const strokePaths = new WeakMap<Stroke, Path2D>();
   let boxes: TextBox[] = $state([]);
   let shapes: Shape[] = $state([]);
   let nextId = 1;
 
-  type Scene = { strokes: Stroke[]; boxes: TextBox[]; shapes: Shape[] };
-  let history: Scene[] = $state([{ strokes: [], boxes: [], shapes: [] }]);
+  type Scene = { strokes: readonly Stroke[]; boxes: TextBox[]; shapes: Shape[] };
+  let history = $state.raw<Scene[]>([{ strokes: [], boxes: [], shapes: [] }]);
   let historyIndex = $state(0);
 
-  // structuredClone throws on $state proxies (DataCloneError), so scenes
-  // are copied through JSON: the scene is plain data (no functions/DOM).
   function cloneScene(scene: Scene): Scene {
-    return JSON.parse(JSON.stringify(scene)) as Scene;
+    // structuredClone throws on $state proxies. Only the mutable objects
+    // need copying; saved ink can share both its samples and cached path.
+    const { boxes, shapes } = JSON.parse(JSON.stringify({ boxes: scene.boxes, shapes: scene.shapes })) as Pick<
+      Scene,
+      "boxes" | "shapes"
+    >;
+    return { strokes: scene.strokes, boxes, shapes };
   }
 
   function snapshot() {
@@ -125,7 +129,6 @@
     editor = null;
     editorText = "";
     currentStroke = null;
-    drawing = false;
     moveDrag = null;
     resizeDrag = null;
     shapeDraw = null;
@@ -144,8 +147,8 @@
     if (historyIndex < history.length - 1) restoreScene(historyIndex + 1);
   }
 
-  let drawing = $state(false);
-  let currentStroke: Stroke | null = null;
+  let currentStroke: { pointerId: number; stroke: Stroke & { points: Point[] } } | null = null;
+  let strokeFrame: number | null = null;
   let tool = $state<Tool>("pen");
   let shapeKind: ShapeKind = $state("line");
   let polygonSides = $state(3);
@@ -176,7 +179,10 @@
     syncDefaultColor();
     const observer = new MutationObserver(syncDefaultColor);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      cancelStrokeRedraw();
+    };
   });
   let lineWidth = $state(4);
 
@@ -367,7 +373,42 @@
     ctx.stroke();
   }
 
+  function strokePath(stroke: Stroke) {
+    const cached = strokePaths.get(stroke);
+    if (cached) return cached;
+    const path = new Path2D();
+    traceStroke(path, stroke.points, stroke.width);
+    if (stroke !== currentStroke?.stroke) strokePaths.set(stroke, path);
+    return path;
+  }
+
+  function drawStroke(ctx: CanvasRenderingContext2D, stroke: Stroke) {
+    const path = strokePath(stroke);
+    if (stroke.points.length === 1) {
+      ctx.fillStyle = stroke.color;
+      ctx.fill(path);
+    } else {
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = stroke.width;
+      ctx.stroke(path);
+    }
+  }
+
+  function scheduleStrokeRedraw() {
+    if (strokeFrame !== null) return;
+    strokeFrame = requestAnimationFrame(() => {
+      strokeFrame = null;
+      redraw();
+    });
+  }
+
+  function cancelStrokeRedraw() {
+    if (strokeFrame !== null) cancelAnimationFrame(strokeFrame);
+    strokeFrame = null;
+  }
+
   function redraw() {
+    cancelStrokeRedraw();
     const ctx = context();
     if (!ctx || !canvas) return;
     ctx.save();
@@ -378,21 +419,8 @@
     ctx.globalCompositeOperation = "source-over";
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    for (const stroke of strokes) {
-      if (stroke.points.length === 1) {
-        ctx.beginPath();
-        ctx.fillStyle = stroke.color;
-        ctx.arc(stroke.points[0].x, stroke.points[0].y, stroke.width / 2, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (stroke.points.length > 1) {
-        ctx.beginPath();
-        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-        for (let i = 1; i < stroke.points.length; i++) ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
-        ctx.strokeStyle = stroke.color;
-        ctx.lineWidth = stroke.width;
-        ctx.stroke();
-      }
-    }
+    for (const stroke of strokes) drawStroke(ctx, stroke);
+    if (currentStroke) drawStroke(ctx, currentStroke.stroke);
     for (const shape of shapes) drawShape(ctx, shape);
     ctx.textBaseline = "top";
     for (const box of boxes) {
@@ -414,18 +442,24 @@
     const ctx = context();
     if (!ctx) return;
     ctx.scale(ratio, ratio);
-    redraw();
+    untrack(redraw);
   }
 
   $effect(() => {
+    if (!open) {
+      untrack(() => finishStroke());
+      cancelStrokeRedraw();
+      return;
+    }
     sizeCanvas();
     window.addEventListener("resize", sizeCanvas);
     return () => window.removeEventListener("resize", sizeCanvas);
   });
 
-  // The canvas has no size while hidden, so (re)size every time it opens.
+  // The textarea takes the place of its stamped canvas text while editing.
   $effect(() => {
-    if (open) sizeCanvas();
+    editor?.id;
+    if (open) untrack(redraw);
   });
 
   function position(event: PointerEvent): Point {
@@ -457,14 +491,12 @@
     return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
   }
 
-  function strokeHit(stroke: Stroke, p: Point, threshold: number) {
+  function strokeHit(ctx: CanvasRenderingContext2D, stroke: Stroke, p: Point, threshold: number) {
     if (stroke.points.length === 1) {
       return Math.hypot(p.x - stroke.points[0].x, p.y - stroke.points[0].y) <= threshold;
     }
-    for (let i = 1; i < stroke.points.length; i++) {
-      if (distToSegment(p, stroke.points[i - 1], stroke.points[i]) <= threshold) return true;
-    }
-    return false;
+    ctx.lineWidth = threshold * 2;
+    return ctx.isPointInStroke(strokePath(stroke), p.x, p.y);
   }
 
   function shapeBox(shape: Shape) {
@@ -887,11 +919,23 @@
 
   function eraseAt(p: Point) {
     const radius = eraserRadius();
-    const strokeHits = new Set(strokes.filter((s) => strokeHit(s, p, radius + s.width / 2)).map((s) => s.id));
+    const ctx = context();
+    const strokeHits = new Set<Stroke>();
+    if (ctx && strokes.length) {
+      ctx.save();
+      // Both the eraser position and the stroke paths are in CSS pixels.
+      ctx.resetTransform();
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (const stroke of strokes) {
+        if (strokeHit(ctx, stroke, p, radius + stroke.width / 2)) strokeHits.add(stroke);
+      }
+      ctx.restore();
+    }
     const boxHits = boxes.filter((b) => insideBox(p, b, radius)).map((b) => b.id);
     const shapeHits = new Set(shapes.filter((s) => shapeHit(s, p, radius)).map((s) => s.id));
     if (strokeHits.size === 0 && boxHits.length === 0 && shapeHits.size === 0) return;
-    strokes = strokes.filter((s) => !strokeHits.has(s.id));
+    if (strokeHits.size) strokes = strokes.filter((s) => !strokeHits.has(s));
     boxes = boxes.filter((b) => !boxHits.includes(b.id));
     shapes = shapes.filter((s) => !shapeHits.has(s.id));
     if (selectedId && (boxHits.includes(selectedId) || shapeHits.has(selectedId))) selectedId = null;
@@ -1379,7 +1423,7 @@
   }
 
   function onDown(event: PointerEvent) {
-    if (!canvas) return;
+    if (!canvas || currentStroke) return;
     colorOpen = false;
     shapesOpen = false;
     viewOpen = false;
@@ -1420,34 +1464,30 @@
       shapeDown(event, p);
       return;
     }
+    if (event.button !== 0) return;
     selectedId = null;
     hoverShapeId = null;
     commitText();
     capturePointer(event.target, event.pointerId);
-    drawing = true;
-    currentStroke = { id: `s-${nextId++}`, points: [p], color, width: lineWidth };
-    strokes.push(currentStroke);
-    // Re-acquire the stored reference: values entering $state can come
-    // back wrapped, so the pre-push object must not be mutated afterwards.
-    currentStroke = strokes[strokes.length - 1];
-    redraw();
+    currentStroke = { pointerId: event.pointerId, stroke: { points: [p], color, width: lineWidth } };
+    scheduleStrokeRedraw();
   }
 
   function onMove(event: PointerEvent) {
+    if (!canvas) return;
+    if (currentStroke) {
+      if (event.pointerId !== currentStroke.pointerId) return;
+      if (event.buttons === 0) {
+        finishStroke();
+      } else if (appendStrokeSamples(currentStroke.stroke.points, event, canvas.getBoundingClientRect())) {
+        scheduleStrokeRedraw();
+      }
+      return;
+    }
     if (event.buttons === 0) {
       // No button held: end any stale gesture (e.g. a pointerup missed
       // outside the canvas) and just track the eraser ring.
-      if (
-        drawing ||
-        currentStroke ||
-        moveDrag ||
-        resizeDrag ||
-        shapeDraw ||
-        shapeHandleDrag ||
-        shapeMoveDrag ||
-        lineSlideDrag ||
-        lineEndpointDrag
-      )
+      if (moveDrag || resizeDrag || shapeDraw || shapeHandleDrag || shapeMoveDrag || lineSlideDrag || lineEndpointDrag)
         onUp();
       if (tool === "eraser") eraserPos = position(event);
       if (tool === "text" || tool === "interact") {
@@ -1578,17 +1618,6 @@
       }
       return;
     }
-    if (drawing && currentStroke) {
-      // Re-resolve the stored stroke every move: the held reference can
-      // detach from what $state actually stores.
-      const stored = strokes.find((s) => s.id === currentStroke!.id);
-      if (stored) {
-        currentStroke = stored;
-        stored.points.push(position(event));
-        redraw();
-      }
-      return;
-    }
     if (tool === "eraser") {
       const p = position(event);
       eraserPos = p;
@@ -1680,25 +1709,33 @@
     if (tooSmall) {
       shapes = shapes.filter((s) => s.id !== id);
       if (selectedId === id) selectedId = null;
+      redraw();
       return;
     }
     selectedId = null;
   }
 
-  function onUp() {
+  function finishStroke(event?: PointerEvent) {
+    if (!currentStroke) return;
+    const { stroke } = currentStroke;
+    if (event?.type === "pointerup" && canvas) {
+      appendStrokeSamples(stroke.points, event, canvas.getBoundingClientRect());
+    }
+    currentStroke = null;
+    strokes = [...strokes, stroke];
+    snapshot();
+    scheduleStrokeRedraw();
+  }
+
+  function onUp(event?: PointerEvent) {
+    if (currentStroke) {
+      if (!event || event.pointerId === currentStroke.pointerId) finishStroke(event);
+      return;
+    }
     const shapeDrawn = shapeDraw;
     if (shapeDrawn) finishShape(shapeDrawn.id);
     const finished =
-      (drawing && currentStroke) ||
-      moveDrag ||
-      resizeDrag ||
-      shapeHandleDrag ||
-      shapeMoveDrag ||
-      shapeDrawn ||
-      lineSlideDrag ||
-      lineEndpointDrag;
-    drawing = false;
-    currentStroke = null;
+      moveDrag || resizeDrag || shapeHandleDrag || shapeMoveDrag || shapeDrawn || lineSlideDrag || lineEndpointDrag;
     moveDrag = null;
     resizeDrag = null;
     shapeDraw = null;
@@ -1711,6 +1748,7 @@
   }
 
   function clearCanvas() {
+    currentStroke = null;
     strokes = [];
     boxes = [];
     shapes = [];
