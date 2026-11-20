@@ -1,5 +1,25 @@
 import { describe, expect, mock, test } from "bun:test";
-import { appendStrokeSamples, traceStroke, type Point } from "./sketch-stroke";
+import { appendStrokeSamples, isPenEraser, isPenEraserContact, traceStroke, type Point } from "./sketch-stroke";
+
+describe("stylus eraser input", () => {
+  test("erases with either a held barrel button or a dedicated eraser tip", () => {
+    expect(isPenEraserContact({ pointerType: "pen", buttons: 3, pressure: 0 })).toBe(true);
+    expect(isPenEraserContact({ pointerType: "pen", buttons: 2, pressure: 0.2 })).toBe(true);
+    expect(isPenEraserContact({ pointerType: "pen", buttons: 32, pressure: 0 })).toBe(true);
+  });
+
+  test("recognizes a hovering barrel button without erasing", () => {
+    const hover = { pointerType: "pen", buttons: 2, pressure: 0 };
+    expect(isPenEraser(hover)).toBe(true);
+    expect(isPenEraserContact(hover)).toBe(false);
+  });
+
+  test("does not treat normal pen contact, right-click or touch as a stylus eraser", () => {
+    expect(isPenEraserContact({ pointerType: "pen", buttons: 1, pressure: 0.5 })).toBe(false);
+    expect(isPenEraserContact({ pointerType: "mouse", buttons: 2, pressure: 0.5 })).toBe(false);
+    expect(isPenEraserContact({ pointerType: "touch", buttons: 1, pressure: 0.5 })).toBe(false);
+  });
+});
 
 describe("appendStrokeSamples", () => {
   const origin = { left: 10, top: 20 };

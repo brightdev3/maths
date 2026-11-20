@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { appendStrokeSamples, traceStroke, type Point } from "./sketch-stroke";
+  import { appendStrokeSamples, isPenEraser, isPenEraserContact, traceStroke, type Point } from "./sketch-stroke";
   import { Button } from "$lib/components/ui/button";
   import { renderMath } from "$lib/mathex/content";
   import NumberAnswer from "$lib/mathex/answers/NumberAnswer.svelte";
@@ -140,14 +140,16 @@
   }
 
   function undo() {
+    finishErasing();
     if (historyIndex > 0) restoreScene(historyIndex - 1);
   }
 
   function redo() {
+    finishErasing();
     if (historyIndex < history.length - 1) restoreScene(historyIndex + 1);
   }
 
-  let currentStroke: { pointerId: number; stroke: Stroke & { points: Point[] } } | null = null;
+  let currentStroke: { pointerId: number; stroke: Stroke & { points: Point[] }; needsMovement: boolean } | null = null;
   let strokeFrame: number | null = null;
   let tool = $state<Tool>("pen");
   let shapeKind: ShapeKind = $state("line");
@@ -194,6 +196,8 @@
   let editorH = $state(MIN_H);
   let colorOpen = $state(false);
   let eraserPos: Point | null = $state(null);
+  let eraserPointerId: number | null = $state(null);
+  let eraserChanged = false;
   let hoverId: string | null = $state(null);
   let hoverShapeId: string | null = $state(null);
   let moveDrag: { id: string; lastX: number; lastY: number } | null = null;
@@ -420,7 +424,9 @@
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     for (const stroke of strokes) drawStroke(ctx, stroke);
-    if (currentStroke) drawStroke(ctx, currentStroke.stroke);
+    if (currentStroke && (!currentStroke.needsMovement || currentStroke.stroke.points.length > 1)) {
+      drawStroke(ctx, currentStroke.stroke);
+    }
     for (const shape of shapes) drawShape(ctx, shape);
     ctx.textBaseline = "top";
     for (const box of boxes) {
@@ -447,7 +453,10 @@
 
   $effect(() => {
     if (!open) {
-      untrack(() => finishStroke());
+      untrack(() => {
+        finishStroke();
+        finishErasing();
+      });
       cancelStrokeRedraw();
       return;
     }
@@ -934,7 +943,7 @@
     }
     const boxHits = boxes.filter((b) => insideBox(p, b, radius)).map((b) => b.id);
     const shapeHits = new Set(shapes.filter((s) => shapeHit(s, p, radius)).map((s) => s.id));
-    if (strokeHits.size === 0 && boxHits.length === 0 && shapeHits.size === 0) return;
+    if (strokeHits.size === 0 && boxHits.length === 0 && shapeHits.size === 0) return false;
     if (strokeHits.size) strokes = strokes.filter((s) => !strokeHits.has(s));
     boxes = boxes.filter((b) => !boxHits.includes(b.id));
     shapes = shapes.filter((s) => !shapeHits.has(s.id));
@@ -943,8 +952,32 @@
       editor = null;
       editorText = "";
     }
-    snapshot();
-    redraw();
+    return true;
+  }
+
+  function startErasing(event: PointerEvent, p: Point) {
+    selectedId = null;
+    hoverId = null;
+    hoverShapeId = null;
+    commitText();
+    capturePointer(event.target, event.pointerId);
+    eraserPointerId = event.pointerId;
+    moveEraser(p);
+  }
+
+  function moveEraser(p: Point) {
+    eraserPos = p;
+    if (eraseAt(p)) {
+      eraserChanged = true;
+      scheduleStrokeRedraw();
+    }
+  }
+
+  function finishErasing() {
+    eraserPointerId = null;
+    eraserPos = null;
+    if (eraserChanged) snapshot();
+    eraserChanged = false;
   }
 
   function fitEditor() {
@@ -1423,12 +1456,18 @@
   }
 
   function onDown(event: PointerEvent) {
-    if (!canvas || currentStroke) return;
+    if (!canvas || currentStroke || eraserPointerId !== null) return;
+    const penErasing = isPenEraser(event);
+    if (!penErasing && event.button !== 0) return;
     colorOpen = false;
     shapesOpen = false;
     viewOpen = false;
     toolsOpen = false;
     const p = position(event);
+    if (penErasing) {
+      if (isPenEraserContact(event)) startErasing(event, p);
+      return;
+    }
     if (construction) {
       commitText();
       constructionDown(event, p);
@@ -1448,11 +1487,7 @@
       return;
     }
     if (tool === "eraser") {
-      selectedId = null;
-      hoverShapeId = null;
-      commitText();
-      eraseAt(p);
-      capturePointer(event.target, event.pointerId);
+      startErasing(event, p);
       return;
     }
     if (tool === "text") {
@@ -1464,27 +1499,57 @@
       shapeDown(event, p);
       return;
     }
-    if (event.button !== 0) return;
+    startStroke(event, p);
+  }
+
+  function startStroke(event: PointerEvent, p: Point, needsMovement = false) {
     selectedId = null;
     hoverShapeId = null;
     commitText();
     capturePointer(event.target, event.pointerId);
-    currentStroke = { pointerId: event.pointerId, stroke: { points: [p], color, width: lineWidth } };
-    scheduleStrokeRedraw();
+    currentStroke = { pointerId: event.pointerId, stroke: { points: [p], color, width: lineWidth }, needsMovement };
+    if (!needsMovement) scheduleStrokeRedraw();
   }
 
   function onMove(event: PointerEvent) {
     if (!canvas) return;
+    if (currentStroke && event.pointerId !== currentStroke.pointerId) return;
+    if (eraserPointerId !== null && event.pointerId !== eraserPointerId) return;
+
+    const primaryDown = (event.buttons & 1) !== 0;
+    // A side button pressed during pen contact arrives as a pointermove,
+    // not as a second pointerdown. Switch tools for this gesture only.
+    if (isPenEraserContact(event)) {
+      const p = position(event);
+      if (eraserPointerId === null) {
+        onUp();
+        startErasing(event, p);
+      } else {
+        moveEraser(p);
+      }
+      return;
+    }
+    if (eraserPointerId !== null) {
+      if (primaryDown && tool === "eraser" && !construction) {
+        moveEraser(position(event));
+      } else {
+        finishErasing();
+        if (primaryDown && event.pointerType === "pen" && tool === "pen" && !construction) {
+          // Resume at this point, but don't leave a dot if the pen just lifts.
+          startStroke(event, position(event), true);
+        }
+      }
+      return;
+    }
     if (currentStroke) {
-      if (event.pointerId !== currentStroke.pointerId) return;
-      if (event.buttons === 0) {
+      if (!primaryDown) {
         finishStroke();
       } else if (appendStrokeSamples(currentStroke.stroke.points, event, canvas.getBoundingClientRect())) {
         scheduleStrokeRedraw();
       }
       return;
     }
-    if (event.buttons === 0) {
+    if (event.buttons === 0 || (event.pointerType === "pen" && !primaryDown)) {
       // No button held: end any stale gesture (e.g. a pointerup missed
       // outside the canvas) and just track the eraser ring.
       if (moveDrag || resizeDrag || shapeDraw || shapeHandleDrag || shapeMoveDrag || lineSlideDrag || lineEndpointDrag)
@@ -1618,12 +1683,6 @@
       }
       return;
     }
-    if (tool === "eraser") {
-      const p = position(event);
-      eraserPos = p;
-      eraseAt(p);
-      return;
-    }
   }
 
   // In interact mode the canvas ignores pointer events, so the window
@@ -1717,17 +1776,22 @@
 
   function finishStroke(event?: PointerEvent) {
     if (!currentStroke) return;
-    const { stroke } = currentStroke;
+    const { stroke, needsMovement } = currentStroke;
     if (event?.type === "pointerup" && canvas) {
       appendStrokeSamples(stroke.points, event, canvas.getBoundingClientRect());
     }
     currentStroke = null;
+    if (needsMovement && stroke.points.length === 1) return;
     strokes = [...strokes, stroke];
     snapshot();
     scheduleStrokeRedraw();
   }
 
   function onUp(event?: PointerEvent) {
+    if (eraserPointerId !== null) {
+      if (!event || event.pointerId === eraserPointerId) finishErasing();
+      return;
+    }
     if (currentStroke) {
       if (!event || event.pointerId === currentStroke.pointerId) finishStroke(event);
       return;
@@ -1749,6 +1813,7 @@
 
   function clearCanvas() {
     currentStroke = null;
+    finishErasing();
     strokes = [];
     boxes = [];
     shapes = [];
@@ -1821,7 +1886,11 @@
       onpointerup={onUp}
       onpointercancel={onUp}
       onlostpointercapture={onUp}
+      oncontextmenu={(event) => {
+        if ("pointerType" in event && event.pointerType === "pen") event.preventDefault();
+      }}
       onpointerleave={() => {
+        eraserPos = null;
         snapPreview = null;
         hoverId = null;
         hoverShapeId = null;
@@ -1845,7 +1914,7 @@
         aria-hidden="true"
       ></div>
     {/if}
-    {#if tool === "eraser" && eraserPos}
+    {#if eraserPos && (tool === "eraser" || eraserPointerId !== null)}
       {@const diameter = eraserRadius() * 2}
       <div
         class="pointer-events-none absolute rounded-full border-2 border-dashed border-foreground/70"
@@ -2202,7 +2271,7 @@
       onclick={() => setTool("eraser")}
       aria-label="Eraser"
       aria-pressed={tool === "eraser"}
-      title="Eraser"
+      title="Eraser (or hold a supported stylus side button)"
     >
       <Eraser class="h-4 w-4" />
     </Button>

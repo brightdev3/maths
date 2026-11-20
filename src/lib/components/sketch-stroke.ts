@@ -2,6 +2,18 @@ export type Point = { x: number; y: number };
 
 type PointerSample = Pick<PointerEvent, "clientX" | "clientY">;
 
+export function isPenEraser({ pointerType, buttons }: Pick<PointerEvent, "pointerType" | "buttons">) {
+  // Pointer Events maps the pen barrel button to 2 and a dedicated eraser to 32.
+  return pointerType === "pen" && (buttons & (2 | 32)) !== 0;
+}
+
+export function isPenEraserContact(event: Pick<PointerEvent, "pointerType" | "buttons" | "pressure">) {
+  if (!isPenEraser(event)) return false;
+  const { buttons, pressure } = event;
+  // The barrel button can be held while hovering, so also require tip contact.
+  return (buttons & (32 | 1)) !== 0 || pressure > 0;
+}
+
 export function appendStrokeSamples(
   points: Point[],
   event: PointerSample & { getCoalescedEvents?: () => PointerSample[] },
