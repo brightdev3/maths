@@ -36,6 +36,7 @@ COPY src/ws/collaborative-set.server.ts ./src/ws/collaborative-set.server.ts
 COPY src/ws/game24.server.ts ./src/ws/game24.server.ts
 COPY src/lib/game24/engine.ts ./src/lib/game24/engine.ts
 COPY src/lib/game24/schemas.ts ./src/lib/game24/schemas.ts
+COPY src/lib/mathex/fair-play.ts ./src/lib/mathex/fair-play.ts
 COPY src/lib/mathex/schemas.ts ./src/lib/mathex/schemas.ts
 COPY src/lib/mathex/rooms.server.ts ./src/lib/mathex/rooms.server.ts
 COPY src/lib/mathex/physical.schemas.ts ./src/lib/mathex/physical.schemas.ts
@@ -53,6 +54,9 @@ ENV MATHEX_COLLAB_PERSIST_DELAY_MS=30000
 ENV MATHEX_COLLAB_LOCK_TTL_MS=30000
 ENV MATHEX_MAX_HTTP_BUFFER_BYTES=10485760
 EXPOSE 5185/tcp
+
+# Check the runtime import graph before publishing an image that cannot start.
+RUN bun -e 'await import("./src/ws/index.server.ts")'
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:5185/ || exit 1
