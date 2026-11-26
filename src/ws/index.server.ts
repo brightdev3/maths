@@ -680,6 +680,7 @@ export const createWSServer = (base: ServerInstance) => {
         room.logs.push(log);
         saveRoom(room);
         manageNamespaceFor(room.id).emit("log", log);
+        manageNamespaceFor(room.id).emit("playerData", getPlayers(room));
         socket.emit(
           "alert",
           "info",

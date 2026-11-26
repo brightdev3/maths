@@ -15,20 +15,21 @@
   } from "$lib/mathex/schemas";
 
   import { Input } from "$lib/components/ui/input";
-  import { Button } from "$lib/components/ui/button";
+  import { Button, buttonVariants } from "$lib/components/ui/button";
   import { Header } from "$lib/components/ui/header";
   import { Label } from "$lib/components/ui/label";
   import { Progress } from "$lib/components/ui/progress";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import * as Select from "$lib/components/ui/select";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { Popover } from "bits-ui";
   import { CHAT_DISCLAIMER, dismissChatDisclaimer, hasDismissedChatDisclaimer } from "$lib/mathex/chat-disclaimer";
   import Identicon from "$lib/components/Identicon.svelte";
   import FairPlayOptions from "$lib/mathex/FairPlayOptions.svelte";
-  import { FAIR_PLAY_WARNING_LABELS } from "$lib/mathex/fair-play";
-  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+  import { FAIR_PLAY_WARNING_LABELS, type FairPlayWarningSummary } from "$lib/mathex/fair-play";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Copy from "@lucide/svelte/icons/copy";
+  import Flag from "@lucide/svelte/icons/flag";
   import MessageCircle from "@lucide/svelte/icons/message-circle";
   import Radio from "@lucide/svelte/icons/radio";
   import Send from "@lucide/svelte/icons/send";
@@ -538,15 +539,8 @@
                   {entry.rank}
                 </div>
                 <Identicon className="w-8 h-8 shrink-0" seed={entry.name} />
-                <div class="min-w-0 flex-1">
-                  <span class="truncate text-sm font-medium">{entry.name}</span>
-                </div>
-                {#if entry.visibilityFlags > 0}
-                  <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
-                    <TriangleAlert class="h-3.5 w-3.5" />
-                    {entry.visibilityFlags}
-                  </span>
-                {/if}
+                <span class="min-w-0 flex-1 truncate text-sm font-medium">{entry.name}</span>
+                {@render activityButton(entry.name, entry.visibilityFlags)}
                 <div class="shrink-0 text-right">
                   <span class="text-lg font-black tabular-nums">{leaderboardScore(entry)}</span>
                   <span class="ml-1 text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground"
@@ -823,32 +817,103 @@
       onclick={() => (kickTarget = player)}
       title="Kick player"
       aria-label={`Kick ${player.name}`}
-      class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+      class={buttonVariants({
+        variant: "ghost",
+        size: "icon",
+        class: "size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+      })}
     >
-      <UserX class="h-3.5 w-3.5" />
+      <UserX class="size-3.5" aria-hidden="true" />
     </button>
   {/if}
 {/snippet}
 
-{#snippet activityWarnings(player: RoomSocketData)}
-  {#if player.fairPlayWarnings?.length}
-    <details class="mt-2 rounded border border-amber-500/30 bg-amber-500/5 p-2 text-xs">
-      <summary class="cursor-pointer font-semibold text-amber-700 dark:text-amber-400">
-        {player.fairPlayWarnings.reduce((total, warning) => total + warning.count, 0)} activity warnings
-      </summary>
-      <p class="mt-2 text-muted-foreground">Review with the player. Not proof of cheating; no score penalty.</p>
-      <ul class="mt-2 space-y-1">
-        {#each player.fairPlayWarnings as warning}
-          <li>
-            <span class="font-medium">{FAIR_PLAY_WARNING_LABELS[warning.kind]} ×{warning.count}</span>
-            <span class="text-muted-foreground">
-              — latest Q{warning.questionNumber}, {new Date(warning.lastAt).toLocaleTimeString()}
-            </span>
-          </li>
-        {/each}
-      </ul>
-    </details>
+{#snippet activityButton(name: string, tabExits: number, warnings: FairPlayWarningSummary[] = [], away = false)}
+  {#if tabExits > 0 || warnings.length > 0}
+    <Popover.Root>
+      <Popover.Trigger
+        aria-label={`Activity for ${name}`}
+        title="View player activity"
+        class={buttonVariants({
+          variant: "ghost",
+          size: "icon",
+          class: `size-6 text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-200 ${
+            away ? "bg-amber-500/20" : "data-[state=open]:bg-accent"
+          }`
+        })}
+      >
+        <Flag class="size-3.5" aria-hidden="true" />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          aria-label={`Activity for ${name}`}
+          align="end"
+          sideOffset={6}
+          class="z-50 max-h-(--bits-popover-content-available-height) w-64 max-w-(--bits-popover-content-available-width) space-y-3 overflow-auto rounded border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="min-w-0 wrap-break-word font-sans text-sm font-bold">Activity for {name}</h3>
+            <Popover.Close
+              aria-label="Close activity"
+              class={buttonVariants({ variant: "ghost", size: "icon", class: "size-6" })}
+            >
+              <X class="size-3.5" aria-hidden="true" />
+            </Popover.Close>
+          </div>
+          {#if tabExits > 0}
+            <div class="flex items-start justify-between gap-2 rounded bg-muted px-2.5 py-2">
+              <div>
+                <p class="font-semibold">Tab exits</p>
+                {#if away}
+                  <p class="mt-0.5 text-amber-700 dark:text-amber-300">Away now · game tab hidden</p>
+                {/if}
+              </div>
+              <span class="font-mono text-sm font-bold tabular-nums">{tabExits}</span>
+            </div>
+          {/if}
+          {#if warnings.length > 0}
+            {@const count = warnings.reduce((total, warning) => total + warning.count, 0)}
+            <div>
+              <p class="font-semibold text-amber-700 dark:text-amber-300">
+                {count} activity {count === 1 ? "warning" : "warnings"}
+              </p>
+              <ul class="mt-1.5 space-y-1.5">
+                {#each warnings as warning (warning.kind)}
+                  <li>
+                    <p class="font-medium">{FAIR_PLAY_WARNING_LABELS[warning.kind]} ×{warning.count}</p>
+                    <p class="text-muted-foreground">
+                      Latest: Q{warning.questionNumber}, {new Date(warning.lastAt).toLocaleTimeString()}
+                    </p>
+                  </li>
+                {/each}
+              </ul>
+              <p class="mt-2 text-muted-foreground">Review with the player. Not proof of cheating; no score penalty.</p>
+            </div>
+          {/if}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   {/if}
+{/snippet}
+
+{#snippet playerDetails(player: RoomSocketData)}
+  <div class="mt-0.5 flex min-h-6 items-center gap-1.5 text-xs text-muted-foreground">
+    {#if currentState !== "lobby"}
+      <span class="min-w-0 truncate font-semibold text-foreground">Q{onQuestion(player)}/{totalQuestions}</span>
+      {#if scoreTimesFive}
+        <span class="min-w-0 truncate">{correctOf(player)} correct</span>
+      {/if}
+    {/if}
+    <div class="ml-auto flex shrink-0 items-center gap-0.5">
+      {@render activityButton(
+        player.name || "Unknown",
+        player.visibilityFlags,
+        player.fairPlayWarnings,
+        currentState === "started" && !player.finishingTime && !!player.awaySince
+      )}
+      {@render kickButton(player)}
+    </div>
+  </div>
 {/snippet}
 
 {#snippet playerListPanel(uid: string)}
@@ -896,14 +961,14 @@
               tick >= 0 && player.startingTime ? (player.finishingTime || Date.now()) - player.startingTime : null}
             <div
               animate:flip={flipParams}
-              class="flex items-center gap-3 border border-solid p-3 transition-colors {player.startingTime
+              class="flex items-center gap-2 border border-solid p-3 transition-colors sm:gap-3 {player.startingTime
                 ? player.finishingTime
                   ? 'bg-secondary/10 border-secondary/40'
                   : 'bg-destructive/5 border-destructive/30'
                 : 'bg-muted/50 border-border'}"
             >
               <div
-                class="flex h-8 w-8 shrink-0 items-center justify-center font-mono text-sm font-bold {player.finishingTime
+                class="flex size-7 shrink-0 items-center justify-center font-mono text-sm font-bold sm:size-8 {player.finishingTime
                   ? 'bg-secondary text-secondary-foreground'
                   : player.startingTime
                     ? 'bg-destructive text-destructive-foreground'
@@ -911,7 +976,7 @@
               >
                 {i + 1}
               </div>
-              <Identicon className="w-10 h-10 shrink-0" seed={player.name || "Choosing..."} />
+              <Identicon className="size-8 shrink-0 sm:size-10" seed={player.name || "Choosing..."} />
               <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-2">
                   <span class="truncate text-sm font-bold">{player.name || "Choosing..."}</span>
@@ -921,22 +986,7 @@
                     >
                   {/if}
                 </div>
-                <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                  {#if currentState === "started" || currentState === "finished"}
-                    <span class="font-semibold text-foreground">Q{onQuestion(player)}/{totalQuestions}</span>
-                    {#if scoreTimesFive}
-                      <span>{correct} correct</span>
-                    {/if}
-                  {/if}
-                  {#if player.visibilityFlags > 0}
-                    <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
-                      <TriangleAlert class="h-3.5 w-3.5" />
-                      {player.visibilityFlags} tab flags
-                    </span>
-                  {/if}
-                  {@render kickButton(player)}
-                </div>
-                {@render activityWarnings(player)}
+                {@render playerDetails(player)}
                 {#if currentState === "started" || currentState === "finished"}
                   <div class="mt-1.5 flex items-center gap-2">
                     <Progress value={scoreProgress} class="h-2 flex-1" />
@@ -1140,9 +1190,9 @@
                               : 'bg-destructive/5 border-destructive/30'
                             : 'bg-muted/50 border-border'}"
                         >
-                          <div class="flex items-center gap-2.5">
+                          <div class="flex items-center gap-2 sm:gap-2.5">
                             <div
-                              class="flex h-8 w-8 shrink-0 items-center justify-center font-mono text-sm font-bold {player.finishingTime
+                              class="flex size-7 shrink-0 items-center justify-center font-mono text-sm font-bold sm:size-8 {player.finishingTime
                                 ? 'bg-secondary text-secondary-foreground'
                                 : player.startingTime
                                   ? 'bg-destructive text-destructive-foreground'
@@ -1150,7 +1200,7 @@
                             >
                               {i + 1}
                             </div>
-                            <Identicon className="w-10 h-10 shrink-0" seed={player.name || "Choosing..."} />
+                            <Identicon className="size-8 shrink-0 sm:size-10" seed={player.name || "Choosing..."} />
                             <div class="min-w-0 flex-1">
                               <div class="flex items-center justify-between gap-2">
                                 <span class="truncate text-sm font-bold">{player.name || "Choosing..."}</span>
@@ -1160,25 +1210,7 @@
                                   >
                                 {/if}
                               </div>
-                              <div
-                                class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground"
-                              >
-                                {#if currentState === "started" || currentState === "finished"}
-                                  <span class="font-semibold text-foreground"
-                                    >Q{onQuestion(player)}/{totalQuestions}</span
-                                  >
-                                  {#if scoreTimesFive}
-                                    <span>{correct} correct</span>
-                                  {/if}
-                                {/if}
-                                {#if player.visibilityFlags > 0}
-                                  <span class="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
-                                    <TriangleAlert class="h-3.5 w-3.5" />
-                                    {player.visibilityFlags} tab flags
-                                  </span>
-                                {/if}
-                                {@render kickButton(player)}
-                              </div>
+                              {@render playerDetails(player)}
                             </div>
                             {#if currentState === "started" || currentState === "finished"}
                               <div
@@ -1194,7 +1226,6 @@
                               </div>
                             {/if}
                           </div>
-                          {@render activityWarnings(player)}
                           {#if currentState === "started" || currentState === "finished"}
                             <div class="flex items-center gap-2">
                               <Progress value={scoreProgress} class="h-2 flex-1" />

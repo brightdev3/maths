@@ -122,6 +122,17 @@ test("fair play warnings are validated, private, retained on reconnect and separ
     await warning("focus-loss");
     expect(storedPlayer().fairPlayWarnings).toHaveLength(2);
 
+    const tabHidden = event<RoomSocketData[]>(host, "playerData", ([p]) => p?.awaySince != null);
+    player.emit("visibilityChange", true);
+    const [awayPlayer] = await tabHidden;
+    expect(awayPlayer.visibilityFlags).toBe(1);
+
+    const tabVisible = event<RoomSocketData[]>(host, "playerData", ([p]) => p?.awaySince === null);
+    player.emit("visibilityChange", false);
+    const [returnedPlayer] = await tabVisible;
+    expect(returnedPlayer.visibilityFlags).toBe(1);
+    expect(returnedPlayer.fairPlayWarnings).toEqual(awayPlayer.fairPlayWarnings);
+
     // Individual finish: other players can still be playing in this room.
     storedPlayer().finishingTime = Date.now();
     await warning("drag");

@@ -10,7 +10,7 @@ All additional controls default to **off**. Existing tab-leaving tracking remain
 
 ## Host review
 
-Each player's card in both dashboard layouts has an expandable **activity warnings** section showing counts by action, plus the latest time and question. The activity log retains each accepted warning. Warnings are private to the host, do not increase tab-leaving flags and never change scores or automatically kick players.
+In either dashboard layout, select the flag button on a player's card to see their tab exits and any activity warnings. The popover shows whether the game tab is currently hidden, and lists warning counts by action with the latest time and question. The activity log retains each accepted warning. Warnings are private to the host, do not increase tab-leaving flags and never change scores or automatically kick players.
 
 The server accepts only known action types enabled by the host, for a joined player who is still playing. It assigns the time and question number, and groups repeated actions of the same type within five seconds (including across reconnects). Per-player summaries are bounded by the seven supported action types and persist with the room. Clipboard contents, images, extension lists and other page contents are not collected.
 

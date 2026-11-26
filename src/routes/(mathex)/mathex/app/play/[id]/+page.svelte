@@ -139,6 +139,8 @@
   socket.on("gameStart", (serverStartingTime) => {
     gameState = "started";
     startingTime = serverStartingTime;
+    // A visible tab can rejoin without a visibilitychange event.
+    if (visibilityTracking && !document.hidden) socket.emit("visibilityChange", false);
   });
   socket.on("gameFinish", () => {
     gameState = "finished";
