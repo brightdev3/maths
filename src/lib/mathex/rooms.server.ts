@@ -5,7 +5,9 @@ import { Database } from "bun:sqlite";
 import type { Room, RoomSocketData } from "./schemas";
 import { DEFAULT_ROOM_SETTINGS } from "./schemas";
 
-type StoredRoom = Omit<Room, "players"> & { players: [string, RoomSocketData][] };
+type Score = Pick<RoomSocketData, "correctCount" | "scoreReachedAt">;
+type StoredPlayer = Omit<RoomSocketData, keyof Score> & Partial<Score>;
+type StoredRoom = Omit<Room, "players"> & { players: [string, StoredPlayer][] };
 
 export class RoomStore {
   private database: Database;
@@ -28,11 +30,27 @@ export class RoomStore {
     for (const row of rows) {
       try {
         const stored = JSON.parse(row.data) as StoredRoom;
-        const players = new Map(stored.players);
-        // Pending answer timers cannot survive a restart. Let affected players continue normally.
-        for (const player of players.values()) {
-          player.isRunning = false;
-          player.runningUntil = null;
+        // Recover score data for older rooms from the log of accepted answers.
+        const scoresByName = new Map<string, Score>();
+        for (const { type, playerName, timestamp } of stored.logs) {
+          if (type === "kicked") scoresByName.delete(playerName);
+          if (type === "correct") {
+            const correctCount = (scoresByName.get(playerName)?.correctCount ?? 0) + 1;
+            scoresByName.set(playerName, { correctCount, scoreReachedAt: timestamp });
+          }
+        }
+        const players = new Map<string, RoomSocketData>();
+        for (const [id, player] of stored.players) {
+          const loggedScore = scoresByName.get(player.name ?? "");
+          const correctCount = player.correctCount ?? loggedScore?.correctCount ?? 0;
+          players.set(id, {
+            ...player,
+            correctCount,
+            scoreReachedAt: correctCount > 0 ? (player.scoreReachedAt ?? loggedScore?.scoreReachedAt ?? null) : null,
+            // Pending answer timers cannot survive a restart.
+            isRunning: false,
+            runningUntil: null
+          });
         }
         rooms.set(row.id, {
           ...stored,

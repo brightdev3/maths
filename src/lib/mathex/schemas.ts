@@ -72,6 +72,8 @@ export interface RoomSocketData {
   fairPlayWarnings?: FairPlayWarningSummary[];
   skips: number;
   correctCount: number;
+  /** Server timestamp when the player reached their current score. */
+  scoreReachedAt: number | null;
 }
 
 export type LogVerbosity = "all" | "submissions" | "finished";

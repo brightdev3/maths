@@ -173,6 +173,7 @@ export const createWSServer = (base: ServerInstance) => {
         player.runningUntil = null;
         player.skips = 0;
         player.correctCount = 0;
+        player.scoreReachedAt = null;
         player.awaySince = null;
       }
       for (const playerSocket of await roomNamespace.fetchSockets()) {
@@ -336,7 +337,8 @@ export const createWSServer = (base: ServerInstance) => {
       visibilityFlags: 0,
       fairPlayWarnings: [],
       skips: 0,
-      correctCount: 0
+      correctCount: 0,
+      scoreReachedAt: null
     };
     socket.on("join", async (name, playerId) => {
       if (typeof name !== "string" || typeof playerId !== "string") return;
@@ -456,9 +458,11 @@ export const createWSServer = (base: ServerInstance) => {
           if (!stillValid()) return;
           if (isCorrect) {
             socket.emit("alert", "success", "Correct!");
-            player.correctCount = (player.correctCount ?? 0) + 1;
+            const timestamp = Date.now();
+            player.correctCount++;
+            player.scoreReachedAt = timestamp;
             const correctLog: LogEntry = {
-              timestamp: Date.now(),
+              timestamp,
               playerName: player.name || "Unknown",
               type: "correct",
               questionNumber
@@ -466,7 +470,7 @@ export const createWSServer = (base: ServerInstance) => {
             room.logs.push(correctLog);
             saveRoom(room);
             manageNamespaceFor(room.id).emit("log", correctLog);
-            if (room.settings.endOnPerfectScore && (player.correctCount ?? 0) >= room.questions.length) {
+            if (room.settings.endOnPerfectScore && player.correctCount >= room.questions.length) {
               socket.emit("confetti");
               socket.emit("stopRunning");
               player.isRunning = false;
@@ -754,53 +758,25 @@ export const createWSServer = (base: ServerInstance) => {
   }
 
   function getPlayers(room: Room) {
-    const data = [...room.players.values()];
-    const elapsedOf = (d: RoomSocketData) =>
-      d.startingTime ? (d.finishingTime ?? Date.now()) - d.startingTime : Number.POSITIVE_INFINITY;
-    data.sort((a, b) => {
-      // Scores are what the host watches, so rank by correct answers first, then time.
-      const byScore = (b.correctCount ?? 0) - (a.correctCount ?? 0);
+    return [...room.players.values()].sort((a, b) => {
+      const byScore = b.correctCount - a.correctCount;
       if (byScore !== 0) return byScore;
-      const byTime = elapsedOf(a) - elapsedOf(b);
-      if (byTime !== 0 && Number.isFinite(byTime)) return byTime;
-      if (!a.startingTime && !b.startingTime) return 0;
-      if (!a.startingTime) return 1;
-      if (!b.startingTime) return -1;
-      if (a.finishingTime && !b.finishingTime) return -1;
-      if (b.finishingTime && !a.finishingTime) return 1;
-      if (a.finishingTime && b.finishingTime)
-        return a.finishingTime - a.startingTime - (b.finishingTime - b.startingTime);
-      return b.currentQuestion - a.currentQuestion;
+      const timeA = a.scoreReachedAt ?? Number.POSITIVE_INFINITY;
+      const timeB = b.scoreReachedAt ?? Number.POSITIVE_INFINITY;
+      return timeA === timeB ? (a.name ?? "").localeCompare(b.name ?? "") : timeA - timeB;
     });
-    return data;
   }
 
   function buildLeaderboard(room: Room): LeaderboardEntry[] {
-    const entries: LeaderboardEntry[] = [];
-    for (const d of room.players.values()) {
-      const totalMs = d.finishingTime && d.startingTime ? d.finishingTime - d.startingTime : null;
-      entries.push({
-        rank: 0,
-        name: d.name || "Unknown",
-        totalMs,
-        questionsCompleted: d.currentQuestion - (d.finishingTime ? 0 : 1),
-        totalQuestions: room.questions.length,
-        visibilityFlags: d.visibilityFlags,
-        skips: d.skips
-      });
-    }
-    entries.sort((a, b) => {
-      // Scores first, then fastest time.
-      const correctA = Math.max(0, a.questionsCompleted - a.skips);
-      const correctB = Math.max(0, b.questionsCompleted - b.skips);
-      if (correctB !== correctA) return correctB - correctA;
-      if (a.totalMs !== null && b.totalMs !== null) return a.totalMs - b.totalMs;
-      if (a.totalMs !== null) return -1;
-      if (b.totalMs !== null) return 1;
-      return b.questionsCompleted - a.questionsCompleted;
-    });
-    entries.forEach((e, i) => (e.rank = i + 1));
-    return entries;
+    return getPlayers(room).map((player, i) => ({
+      rank: i + 1,
+      name: player.name || "Unknown",
+      totalMs: player.finishingTime && player.startingTime ? player.finishingTime - player.startingTime : null,
+      questionsCompleted: player.correctCount + player.skips,
+      totalQuestions: room.questions.length,
+      visibilityFlags: player.visibilityFlags,
+      skips: player.skips
+    }));
   }
 
   return { io, flush: collaborativeSets.flush };

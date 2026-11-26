@@ -220,38 +220,15 @@
     return logs;
   });
 
-  // Fallback for rooms created before per-player correct counts were tracked.
-  let correctByName = $derived.by(() => {
-    const counts = new Map<string, number>();
-    for (const log of logs) {
-      if (log.type === "correct") counts.set(log.playerName, (counts.get(log.playerName) ?? 0) + 1);
-    }
-    return counts;
-  });
-
-  function correctOf(player: RoomSocketData): number {
-    if (typeof player.correctCount === "number") return player.correctCount;
-    return correctByName.get(player.name ?? "") ?? 0;
-  }
-
-  function displayScoreOf(player: RoomSocketData): number {
-    const correct = correctOf(player);
+  function displayScore(correct: number): number {
     return scoreTimesFive ? correct * 5 : correct;
   }
 
-  // Primary rank: score, then elapsed time.
-  let sortedPlayers = $derived.by(() => {
-    void tick;
-    const elapsedOf = (p: RoomSocketData) =>
-      p.startingTime ? (p.finishingTime ?? Date.now()) - p.startingTime : Number.POSITIVE_INFINITY;
-    return [...players].sort((a, b) => {
-      const byScore = correctOf(b) - correctOf(a);
-      if (byScore !== 0) return byScore;
-      const byTime = elapsedOf(a) - elapsedOf(b);
-      if (byTime !== 0 && Number.isFinite(byTime)) return byTime;
-      if (b.currentQuestion !== a.currentQuestion) return b.currentQuestion - a.currentQuestion;
-      return (a.name ?? "").localeCompare(b.name ?? "");
-    });
+  const scoreTimeFormat = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    fractionalSecondDigits: 3
   });
 
   function onQuestion(player: RoomSocketData): number {
@@ -259,13 +236,8 @@
     return player.currentQuestion;
   }
 
-  function leaderboardCorrect(entry: LeaderboardEntry): number {
-    return Math.max(0, entry.questionsCompleted - entry.skips);
-  }
-
   function leaderboardScore(entry: LeaderboardEntry): number {
-    const correct = leaderboardCorrect(entry);
-    return scoreTimesFive ? correct * 5 : correct;
+    return displayScore(Math.max(0, entry.questionsCompleted - entry.skips));
   }
 
   let leaderboard: LeaderboardEntry[] = $state([]);
@@ -901,7 +873,7 @@
     {#if currentState !== "lobby"}
       <span class="min-w-0 truncate font-semibold text-foreground">Q{onQuestion(player)}/{totalQuestions}</span>
       {#if scoreTimesFive}
-        <span class="min-w-0 truncate">{correctOf(player)} correct</span>
+        <span class="min-w-0 truncate">{player.correctCount} correct</span>
       {/if}
     {/if}
     <div class="ml-auto flex shrink-0 items-center gap-0.5">
@@ -914,6 +886,24 @@
       {@render kickButton(player)}
     </div>
   </div>
+{/snippet}
+
+{#snippet playerScore(player: RoomSocketData)}
+  {#if currentState !== "lobby"}
+    {@const score = displayScore(player.correctCount)}
+    <div
+      class="shrink-0 text-right"
+      aria-label="{player.name} score {score}"
+      title={player.scoreReachedAt === null
+        ? undefined
+        : `Score reached at ${scoreTimeFormat.format(player.scoreReachedAt)}`}
+    >
+      <div class="text-2xl font-black tabular-nums leading-none">{score}</div>
+      <div class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
+        {scoreTimesFive ? "pts" : "correct"}
+      </div>
+    </div>
+  {/if}
 {/snippet}
 
 {#snippet playerListPanel(uid: string)}
@@ -954,9 +944,8 @@
     {#if panelIsOpen("players")}
       <div transition:slide={slideParams}>
         <div class="mt-4 flex max-h-[55vh] flex-col gap-2 overflow-y-auto scrollbar-thin lg:max-h-[32rem]">
-          {#each sortedPlayers as player, i (player.playerId ?? player.name)}
-            {@const correct = correctOf(player)}
-            {@const scoreProgress = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0}
+          {#each players as player, i (player.playerId ?? player.name)}
+            {@const scoreProgress = totalQuestions > 0 ? (player.correctCount / totalQuestions) * 100 : 0}
             {@const elapsed =
               tick >= 0 && player.startingTime ? (player.finishingTime || Date.now()) - player.startingTime : null}
             <div
@@ -993,14 +982,7 @@
                   </div>
                 {/if}
               </div>
-              {#if currentState === "started" || currentState === "finished"}
-                <div class="shrink-0 text-right" aria-label="{player.name} score {displayScoreOf(player)}">
-                  <div class="text-2xl font-black tabular-nums leading-none">{displayScoreOf(player)}</div>
-                  <div class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
-                    {scoreTimesFive ? "pts" : "correct"}
-                  </div>
-                </div>
-              {/if}
+              {@render playerScore(player)}
             </div>
           {:else}
             <p class="italic text-sm text-muted-foreground">No players yet</p>
@@ -1175,9 +1157,8 @@
                 {#if panelIsOpen("players")}
                   <div transition:slide={slideParams}>
                     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {#each sortedPlayers as player, i (player.playerId ?? player.name)}
-                        {@const correct = correctOf(player)}
-                        {@const scoreProgress = totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0}
+                      {#each players as player, i (player.playerId ?? player.name)}
+                        {@const scoreProgress = totalQuestions > 0 ? (player.correctCount / totalQuestions) * 100 : 0}
                         {@const elapsed =
                           tick >= 0 && player.startingTime
                             ? (player.finishingTime || Date.now()) - player.startingTime
@@ -1212,19 +1193,7 @@
                               </div>
                               {@render playerDetails(player)}
                             </div>
-                            {#if currentState === "started" || currentState === "finished"}
-                              <div
-                                class="shrink-0 text-right"
-                                aria-label="{player.name} score {displayScoreOf(player)}"
-                              >
-                                <div class="text-2xl font-black tabular-nums leading-none">
-                                  {displayScoreOf(player)}
-                                </div>
-                                <div class="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
-                                  {scoreTimesFive ? "pts" : "correct"}
-                                </div>
-                              </div>
-                            {/if}
+                            {@render playerScore(player)}
                           </div>
                           {#if currentState === "started" || currentState === "finished"}
                             <div class="flex items-center gap-2">

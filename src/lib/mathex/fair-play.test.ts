@@ -58,6 +58,7 @@ describe("fair play warnings", () => {
       visibilityFlags: 0,
       skips: 0,
       correctCount: 1,
+      scoreReachedAt: 10000,
       fairPlayWarnings: [{ kind: "copy" as const, count: 2, lastAt: 20000, questionNumber: 2 }]
     };
     const room: Room = {
