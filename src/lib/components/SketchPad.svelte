@@ -2239,12 +2239,28 @@
       clearSelection();
       return;
     }
-    if (!selection || selectionGesture || event.altKey) return;
+    if (!selection || selectionGesture || event.altKey || event.ctrlKey || event.metaKey) return;
     if (key === "delete" || key === "backspace") {
       event.preventDefault();
       deleteSelection();
+      return;
+    }
+    const direction = nudgeDirections[key];
+    if (direction) {
+      event.preventDefault();
+      if (!event.repeat) {
+        const step = event.shiftKey ? 10 : 1;
+        translateSelection(direction.x * step, direction.y * step);
+      }
     }
   }
+
+  const nudgeDirections: Partial<Record<string, Point>> = {
+    arrowleft: { x: -1, y: 0 },
+    arrowright: { x: 1, y: 0 },
+    arrowup: { x: 0, y: -1 },
+    arrowdown: { x: 0, y: 1 }
+  };
 
   function onCopy(event: ClipboardEvent) {
     if (!open || pageInteraction || event.defaultPrevented || isEditable(event) || !selection || selectionGesture)
@@ -2858,10 +2874,14 @@
               title="Delete selection"><Trash class="h-4 w-4" /></Button
             >
           </div>
-          <p class="px-1 text-xs text-muted-foreground" role="status">
+          <p
+            class="px-1 text-xs text-muted-foreground"
+            role="status"
+            title="Arrow keys move 1 px; Shift + arrows move 10 px"
+          >
             {selectionStatus ||
               (selectionCount
-                ? `${selectionCount} selected · drag to move`
+                ? `${selectionCount} selected · drag or use arrows`
                 : selectionMode === "box"
                   ? "Drag a box around figures"
                   : "Draw a loop around figures")}
