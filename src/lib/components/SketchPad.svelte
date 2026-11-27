@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { appendStrokeSamples, isPenEraser, isPenEraserContact, traceStroke, type Point } from "./sketch-stroke";
+  import { areaHit, boxCorners, insideBox, pointBounds } from "./sketch-selection";
   import { Button } from "$lib/components/ui/button";
   import { renderMath } from "$lib/mathex/content";
   import NumberAnswer from "$lib/mathex/answers/NumberAnswer.svelte";
@@ -14,6 +15,10 @@
   import Undo from "@lucide/svelte/icons/undo";
   import Redo from "@lucide/svelte/icons/redo";
   import MousePointer2 from "@lucide/svelte/icons/mouse-pointer-2";
+  import Scan from "@lucide/svelte/icons/scan";
+  import Lasso from "@lucide/svelte/icons/lasso";
+  import Copy from "@lucide/svelte/icons/copy";
+  import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
   import Shapes from "@lucide/svelte/icons/shapes";
   import Lock from "@lucide/svelte/icons/lock";
   import LockOpen from "@lucide/svelte/icons/lock-open";
@@ -79,7 +84,7 @@
     points?: Point[];
   };
   type ShapeHandle = "start" | "end" | "nw" | "ne" | "sw" | "se" | "center" | "radius" | `vertex-${number}`;
-  type Tool = "pen" | "temporary-pen" | "eraser" | "text" | "interact" | "shape" | "move";
+  type Tool = "pen" | "temporary-pen" | "eraser" | "text" | "interact" | "shape" | "move" | "select";
   type ViewMode = "blank" | "overlay" | "grid" | "question";
   type ConstructionTool = "circumcircle" | "incircle" | "bisector" | "slide-line" | null;
 
@@ -127,6 +132,7 @@
     strokes = copy.strokes;
     boxes = copy.boxes;
     shapes = copy.shapes;
+    clearSelection();
     selectedId = null;
     hoverId = null;
     editor = null;
@@ -177,6 +183,16 @@
   let temporaryTimer: ReturnType<typeof setTimeout> | undefined;
   let strokeFrame: number | null = null;
   let tool = $state<Tool>("pen");
+  let selectionMode = $state<"box" | "lasso">("box");
+  let selection = $state.raw<Scene | null>(null);
+  let sketchClipboard = $state.raw<Scene | null>(null);
+  let pasteOffset = 0;
+  let selectionStatus = $state("");
+  let selectionGesture = $state.raw<
+    | { kind: "area"; pointerId: number; points: Point[] }
+    | { kind: "move"; pointerId: number; start: Point; end: Point }
+    | null
+  >(null);
   let shapeKind: ShapeKind = $state("line");
   let polygonSides = $state(3);
   let shapesOpen = $state(false);
@@ -270,6 +286,16 @@
   const canSubmitSketch = $derived(sketchAnswer !== null && sketchAnswer !== "");
   const canUndo = $derived(constructionPoints.length > 0 || historyIndex > 0);
   const canRedo = $derived(constructionRedo.length > 0 || historyIndex < history.length - 1);
+  const selectionCount = $derived(
+    selection ? selection.strokes.length + selection.boxes.length + selection.shapes.length : 0
+  );
+  const selectionBounds = $derived(selection ? sceneBounds(selection) : null);
+  const selectionArea = $derived(selectionGesture?.kind === "area" ? areaPoints(selectionGesture.points) : null);
+  const selectionOffset = $derived(
+    selectionGesture?.kind === "move"
+      ? { x: selectionGesture.end.x - selectionGesture.start.x, y: selectionGesture.end.y - selectionGesture.start.y }
+      : { x: 0, y: 0 }
+  );
 
   $effect(() => {
     question;
@@ -477,7 +503,18 @@
     ctx.globalCompositeOperation = "source-over";
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    for (const stroke of strokes) drawStroke(ctx, stroke);
+    const moving = selectionGesture?.kind === "move" ? selection : null;
+    const movingStrokes = moving ? new Set(moving.strokes) : null;
+    for (const stroke of strokes) {
+      if (movingStrokes?.has(stroke)) {
+        ctx.save();
+        ctx.translate(selectionOffset.x, selectionOffset.y);
+        drawStroke(ctx, stroke);
+        ctx.restore();
+      } else {
+        drawStroke(ctx, stroke);
+      }
+    }
     if (
       currentStroke &&
       !currentStroke.temporary &&
@@ -485,7 +522,16 @@
     ) {
       drawStroke(ctx, currentStroke.stroke);
     }
-    for (const shape of shapes) drawShape(ctx, shape);
+    for (const shape of shapes) {
+      if (moving?.shapes.includes(shape)) {
+        ctx.save();
+        ctx.translate(selectionOffset.x, selectionOffset.y);
+        drawShape(ctx, shape);
+        ctx.restore();
+      } else {
+        drawShape(ctx, shape);
+      }
+    }
     ctx.textBaseline = "top";
     for (const box of boxes) {
       if (editor && editor.id === box.id) continue;
@@ -493,7 +539,8 @@
       ctx.fillStyle = box.color;
       const lines = wrapText(ctx, box.text, Math.max(10, box.w - PAD * 2));
       const lh = box.fontSize * 1.25;
-      lines.forEach((line, i) => ctx.fillText(line, box.x + PAD, box.y + PAD + i * lh));
+      const { x, y } = moving?.boxes.includes(box) ? selectionOffset : { x: 0, y: 0 };
+      lines.forEach((line, i) => ctx.fillText(line, box.x + x + PAD, box.y + y + PAD + i * lh));
     }
     if (temporaryStrokes.length || currentStroke?.temporary) drawTemporaryInk(ctx);
     ctx.restore();
@@ -515,6 +562,7 @@
       untrack(() => {
         finishStroke();
         finishErasing();
+        clearSelection();
         temporaryStrokes = [];
       });
       cancelStrokeRedraw();
@@ -535,10 +583,6 @@
   function position(event: PointerEvent): Point {
     const rect = canvas!.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
-  }
-
-  function insideBox(p: Point, b: TextBox, tol = 0) {
-    return p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol;
   }
 
   function onBorder(p: Point, b: TextBox, tol = BORDER_TOL) {
@@ -599,6 +643,179 @@
         point.y += dy;
       }
     }
+  }
+
+  function shapePath(shape: Shape) {
+    const segments = shapeSegments(shape);
+    if (segments.length) return [segments[0].a, ...segments.map(({ b }) => b)];
+    const circle = shapeCircle(shape);
+    const box = shapeBox(shape);
+    const rx = circle?.radius ?? box.w / 2;
+    const ry = circle?.radius ?? box.h / 2;
+    const center = circle?.center ?? { x: box.x + rx, y: box.y + ry };
+    return Array.from({ length: 65 }, (_, i) => {
+      const angle = (i / 64) * 2 * Math.PI;
+      return { x: center.x + rx * Math.cos(angle), y: center.y + ry * Math.sin(angle) };
+    });
+  }
+
+  function sceneBounds(scene: Scene) {
+    const bounds = [
+      ...scene.strokes.map((stroke) => pointBounds(stroke.points, stroke.width / 2)),
+      ...scene.shapes.map((shape) => pointBounds(shapePath(shape), shape.width / 2)),
+      ...scene.boxes
+    ];
+    return bounds.length ? pointBounds(bounds.flatMap(boxCorners)) : null;
+  }
+
+  function areaPoints(points: Point[]) {
+    return selectionMode === "box" ? boxCorners(pointBounds(points)) : points;
+  }
+
+  function selectArea(area: Point[]) {
+    const bounds = pointBounds(area);
+    if (area.length < 3 || bounds.w < 3 || bounds.h < 3) return;
+    const next: Scene = {
+      strokes: strokes.filter((stroke) => areaHit(area, stroke.points)),
+      shapes: shapes.filter((shape) => areaHit(area, shapePath(shape))),
+      boxes: boxes.filter((box) => {
+        const corners = boxCorners(box);
+        return area.some((point) => insideBox(point, box)) || areaHit(area, [...corners, corners[0]]);
+      })
+    };
+    selection = next.strokes.length || next.shapes.length || next.boxes.length ? next : null;
+    if (!selection) selectionStatus = "No figures in that area.";
+  }
+
+  function clearSelection() {
+    const moving = selectionGesture?.kind === "move";
+    selection = null;
+    selectionGesture = null;
+    selectionStatus = "";
+    if (moving) redraw();
+  }
+
+  function startSelection(event: PointerEvent, p: Point) {
+    capturePointer(event.target, event.pointerId);
+    selectionStatus = "";
+    if (selectionBounds && insideBox(p, selectionBounds, 6)) {
+      selectionGesture = { kind: "move", pointerId: event.pointerId, start: p, end: p };
+    } else {
+      selection = null;
+      selectionGesture = { kind: "area", pointerId: event.pointerId, points: [p] };
+    }
+  }
+
+  function updateSelection(p: Point, final = false) {
+    const gesture = selectionGesture;
+    if (!gesture) return;
+    if (gesture.kind === "move") {
+      selectionGesture = { ...gesture, end: p };
+      scheduleStrokeRedraw();
+    } else if (selectionMode === "box") {
+      selectionGesture = { ...gesture, points: [gesture.points[0], p] };
+    } else {
+      const last = gesture.points[gesture.points.length - 1];
+      if (final || Math.hypot(p.x - last.x, p.y - last.y) >= 3) {
+        gesture.points.push(p);
+        selectionGesture = { ...gesture };
+      }
+    }
+  }
+
+  function offsetStroke(stroke: Stroke, dx: number, dy: number): Stroke {
+    return { ...stroke, points: stroke.points.map(({ x, y }) => ({ x: x + dx, y: y + dy })) };
+  }
+
+  function translateSelection(dx: number, dy: number) {
+    if (!selection || (!dx && !dy)) {
+      redraw();
+      return;
+    }
+    const ink = new Set(selection.strokes);
+    const moved: Stroke[] = [];
+    strokes = strokes.map((stroke) => {
+      if (!ink.has(stroke)) return stroke;
+      const next = offsetStroke(stroke, dx, dy);
+      moved.push(next);
+      return next;
+    });
+    for (const shape of selection.shapes) translateShape(shape, dx, dy);
+    for (const box of selection.boxes) {
+      box.x += dx;
+      box.y += dy;
+    }
+    selection = { ...selection, strokes: moved };
+    snapshot();
+    redraw();
+  }
+
+  function finishSelection(event?: PointerEvent) {
+    if (event && event.pointerId !== selectionGesture?.pointerId) return;
+    if (event?.type === "pointerup") updateSelection(position(event), true);
+    const gesture = selectionGesture;
+    if (!gesture) return;
+    const { x, y } = selectionOffset;
+    selectionGesture = null;
+    if (event && event.type !== "pointerup") {
+      redraw();
+    } else if (gesture.kind === "area") {
+      selectArea(areaPoints(gesture.points));
+    } else {
+      translateSelection(x, y);
+    }
+  }
+
+  function copySelection() {
+    if (!selection || selectionGesture) return;
+    sketchClipboard = cloneScene(selection);
+    pasteOffset = 0;
+    selectionStatus = `Copied ${selectionCount} ${selectionCount === 1 ? "figure" : "figures"}.`;
+  }
+
+  function pasteSelection() {
+    if (!sketchClipboard || !canvas || selectionGesture) return;
+    const bounds = sceneBounds(sketchClipboard);
+    if (!bounds) return;
+    chooseSelection(selectionMode);
+    pasteOffset += 16;
+    const dx = Math.max(8 - bounds.x, Math.min(pasteOffset, canvas.clientWidth - 8 - bounds.w - bounds.x));
+    const dy = Math.max(8 - bounds.y, Math.min(pasteOffset, canvas.clientHeight - 8 - bounds.h - bounds.y));
+    const pasted = cloneScene(sketchClipboard);
+    pasted.strokes = pasted.strokes.map((stroke) => offsetStroke(stroke, dx, dy));
+    for (const box of pasted.boxes) {
+      box.id = `tb-${Date.now().toString(36)}-${nextId++}`;
+      box.x += dx;
+      box.y += dy;
+    }
+    for (const shape of pasted.shapes) {
+      shape.id = nextShapeId();
+      translateShape(shape, dx, dy);
+    }
+    strokes = [...strokes, ...pasted.strokes];
+    shapes.push(...pasted.shapes);
+    boxes.push(...pasted.boxes);
+    // Read back the reactive objects rather than retaining their plain inputs.
+    selection = {
+      strokes: pasted.strokes,
+      boxes: boxes.slice(boxes.length - pasted.boxes.length),
+      shapes: shapes.slice(shapes.length - pasted.shapes.length)
+    };
+    snapshot();
+    redraw();
+  }
+
+  function deleteSelection() {
+    if (!selection || selectionGesture) return;
+    const ink = new Set(selection.strokes);
+    const text = new Set(selection.boxes);
+    const figures = new Set(selection.shapes);
+    strokes = strokes.filter((stroke) => !ink.has(stroke));
+    boxes = boxes.filter((box) => !text.has(box));
+    shapes = shapes.filter((shape) => !figures.has(shape));
+    clearSelection();
+    snapshot();
+    redraw();
   }
 
   function shapeHit(shape: Shape, p: Point, tol = 6) {
@@ -1019,6 +1236,7 @@
   }
 
   function startErasing(event: PointerEvent, p: Point) {
+    clearSelection();
     selectedId = null;
     hoverId = null;
     hoverShapeId = null;
@@ -1145,6 +1363,7 @@
     // editor can never strand the pad. Stray blurs (dialogs, devtools)
     // intentionally leave the text alone.
     commitText();
+    clearSelection();
     hoverId = null;
     shapesOpen = false;
     viewOpen = false;
@@ -1155,6 +1374,7 @@
 
   function chooseShape(kind: ShapeKind) {
     commitText();
+    clearSelection();
     hoverId = null;
     hoverShapeId = null;
     colorOpen = false;
@@ -1167,6 +1387,7 @@
 
   function chooseMove() {
     commitText();
+    clearSelection();
     hoverId = null;
     hoverShapeId = null;
     colorOpen = false;
@@ -1178,6 +1399,7 @@
 
   function toggleShapes() {
     commitText();
+    clearSelection();
     hoverId = null;
     colorOpen = false;
     viewOpen = false;
@@ -1218,6 +1440,7 @@
 
   function startConstruction(next: Exclude<ConstructionTool, null>) {
     commitText();
+    clearSelection();
     colorOpen = false;
     shapesOpen = false;
     viewOpen = false;
@@ -1227,6 +1450,21 @@
     selectedId = null;
     cancelConstruction();
     construction = next;
+  }
+
+  function chooseSelection(next: typeof selectionMode) {
+    if (tool !== "select" || construction) {
+      setTool("select");
+      tool = "select";
+      selectedId = null;
+      hoverShapeId = null;
+    }
+    colorOpen = false;
+    shapesOpen = false;
+    viewOpen = false;
+    toolsOpen = false;
+    selectionStatus = "";
+    selectionMode = next;
   }
 
   function toggleTools() {
@@ -1544,9 +1782,10 @@
   }
 
   function onDown(event: PointerEvent) {
-    if (!canvas || currentStroke || eraserPointerId !== null) return;
+    if (!canvas || currentStroke || eraserPointerId !== null || selectionGesture) return;
     const penErasing = isPenEraser(event);
     if (!penErasing && event.button !== 0) return;
+    canvas.focus({ preventScroll: true });
     colorOpen = false;
     shapesOpen = false;
     viewOpen = false;
@@ -1587,6 +1826,10 @@
       shapeDown(event, p);
       return;
     }
+    if (tool === "select") {
+      startSelection(event, p);
+      return;
+    }
     startStroke(event, p);
   }
 
@@ -1608,6 +1851,7 @@
     if (!canvas) return;
     if (currentStroke && event.pointerId !== currentStroke.pointerId) return;
     if (eraserPointerId !== null && event.pointerId !== eraserPointerId) return;
+    if (selectionGesture && event.pointerId !== selectionGesture.pointerId) return;
 
     const primaryDown = (event.buttons & 1) !== 0;
     // A side button pressed during pen contact arrives as a pointermove,
@@ -1627,7 +1871,12 @@
         moveEraser(position(event));
       } else {
         finishErasing();
-        if (primaryDown && event.pointerType === "pen" && (tool === "pen" || tool === "temporary-pen") && !construction) {
+        if (
+          primaryDown &&
+          event.pointerType === "pen" &&
+          (tool === "pen" || tool === "temporary-pen") &&
+          !construction
+        ) {
           // Resume at this point, but don't leave a dot if the pen just lifts.
           startStroke(event, position(event), true);
         }
@@ -1640,6 +1889,11 @@
       } else if (appendStrokeSamples(currentStroke.stroke.points, event, canvas.getBoundingClientRect())) {
         scheduleStrokeRedraw();
       }
+      return;
+    }
+    if (selectionGesture) {
+      if (primaryDown) updateSelection(position(event));
+      else finishSelection();
       return;
     }
     if (event.buttons === 0 || (event.pointerType === "pen" && !primaryDown)) {
@@ -1838,11 +2092,13 @@
   });
 
   function isEditable(event: Event) {
-    return event.composedPath().some(
-      (target) =>
-        target instanceof HTMLElement &&
-        (target.isContentEditable || target.matches("input, textarea, select, math-field"))
-    );
+    return event
+      .composedPath()
+      .some(
+        (target) =>
+          target instanceof HTMLElement &&
+          (target.isContentEditable || target.matches("input, textarea, select, math-field"))
+      );
   }
 
   function onShortcut(event: KeyboardEvent) {
@@ -1851,12 +2107,35 @@
       cancelConstruction();
       return;
     }
-    if (pageInteraction || (!(event.ctrlKey || event.metaKey)) || event.altKey) return;
+    if (pageInteraction) return;
     const key = event.key.toLowerCase();
-    if (key === "z" || key === "y") {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+      if (key === "z" || key === "y") {
+        event.preventDefault();
+        if (key === "y" || event.shiftKey) redo();
+        else undo();
+      } else if (key === "c" && selection && !selectionGesture) {
+        event.preventDefault();
+        copySelection();
+      }
+      return;
+    }
+    if (key === "escape" && (selection || selectionGesture)) {
+      clearSelection();
+      return;
+    }
+    if (!selection || selectionGesture || event.altKey) return;
+    if (key === "delete" || key === "backspace") {
       event.preventDefault();
-      if (key === "y" || event.shiftKey) redo();
-      else undo();
+      deleteSelection();
+    }
+  }
+
+  function onPaste(event: ClipboardEvent) {
+    if (!open || pageInteraction || event.defaultPrevented || isEditable(event)) return;
+    if (sketchClipboard && !selectionGesture) {
+      event.preventDefault();
+      pasteSelection();
     }
   }
 
@@ -1907,6 +2186,10 @@
       if (!event || event.pointerId === currentStroke.pointerId) finishStroke(event);
       return;
     }
+    if (selectionGesture) {
+      finishSelection(event);
+      return;
+    }
     const shapeDrawn = shapeDraw;
     if (shapeDrawn) finishShape(shapeDrawn.id);
     const finished =
@@ -1930,6 +2213,7 @@
     strokes = [];
     boxes = [];
     shapes = [];
+    clearSelection();
     selectedId = null;
     hoverId = null;
     editor = null;
@@ -1941,7 +2225,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onShortcut} />
+<svelte:window onkeydown={onShortcut} onpaste={onPaste} />
 
 <div
   class="fixed inset-0 z-50 flex flex-col {open ? '' : 'hidden'} {pageInteraction ? 'pointer-events-none' : ''}"
@@ -1995,7 +2279,13 @@
   <div class="relative min-h-0 flex-1">
     <canvas
       bind:this={canvas}
-      class="absolute inset-0 h-full w-full touch-none {pageInteraction ? 'pointer-events-none' : ''}"
+      tabindex={-1}
+      class="absolute inset-0 h-full w-full touch-none {pageInteraction ? 'pointer-events-none' : ''} {tool ===
+        'select' && !construction
+        ? selectionGesture?.kind === 'move'
+          ? 'cursor-move'
+          : 'cursor-crosshair'
+        : ''}"
       onpointerdown={onDown}
       onpointermove={onMove}
       onpointerup={onUp}
@@ -2011,6 +2301,28 @@
         hoverShapeId = null;
       }}
     ></canvas>
+    {#if selectionArea}
+      <svg class="pointer-events-none absolute inset-0 h-full w-full text-primary" aria-hidden="true">
+        <polygon
+          points={selectionArea.map(({ x, y }) => `${x},${y}`).join(" ")}
+          fill="currentColor"
+          fill-opacity="0.1"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-dasharray="5 4"
+        />
+      </svg>
+    {/if}
+    {#if selectionBounds}
+      <div
+        class="pointer-events-none absolute rounded-sm border-2 border-dashed border-primary"
+        style:left="{selectionBounds.x + selectionOffset.x - 4}px"
+        style:top="{selectionBounds.y + selectionOffset.y - 4}px"
+        style:width="{selectionBounds.w + 8}px"
+        style:height="{selectionBounds.h + 8}px"
+        aria-hidden="true"
+      ></div>
+    {/if}
     {#if construction && construction !== "slide-line"}
       {#each constructionPoints as point, index (index)}
         <div
@@ -2310,6 +2622,87 @@
       >
         <Redo class="h-4 w-4" />
       </button>
+    </div>
+    <div class="relative">
+      <Button
+        variant={tool === "select" && !construction ? "default" : "ghost"}
+        size="icon"
+        class="size-8"
+        onclick={() => {
+          if (tool === "select" && !construction) setTool("pen");
+          else chooseSelection(selectionMode);
+        }}
+        aria-label="Area selection"
+        aria-pressed={tool === "select" && !construction}
+        title="Area selection (box or lasso)"
+      >
+        <Scan class="h-4 w-4" />
+      </Button>
+      {#if tool === "select" && !construction && !shapesOpen && !toolsOpen && !colorOpen && !viewOpen}
+        <div
+          use:anchorPanel
+          class="sketch-panel flex flex-col gap-1 rounded-xl border border-border bg-card p-2 shadow"
+          role="group"
+          aria-label="Area selection tools"
+        >
+          <div class="flex flex-wrap items-center gap-1">
+            <Button
+              variant={selectionMode === "box" ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => chooseSelection("box")}
+              aria-label="Box select"
+              aria-pressed={selectionMode === "box"}
+              title="Box select"><Scan class="h-4 w-4" /></Button
+            >
+            <Button
+              variant={selectionMode === "lasso" ? "default" : "ghost"}
+              size="icon"
+              class="size-8"
+              onclick={() => chooseSelection("lasso")}
+              aria-label="Lasso select"
+              aria-pressed={selectionMode === "lasso"}
+              title="Lasso select"><Lasso class="h-4 w-4" /></Button
+            >
+            <div class="mx-0.5 h-6 w-px bg-border" aria-hidden="true"></div>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="size-8"
+              onclick={copySelection}
+              disabled={!selection || !!selectionGesture}
+              aria-label="Copy selection"
+              title="Copy selection (Ctrl/⌘+C)"><Copy class="h-4 w-4" /></Button
+            >
+            <Button
+              variant="ghost"
+              size="icon"
+              class="size-8"
+              onclick={pasteSelection}
+              disabled={!sketchClipboard || !!selectionGesture}
+              aria-label="Paste selection"
+              title="Paste selection (Ctrl/⌘+V)"><ClipboardPaste class="h-4 w-4" /></Button
+            >
+            <Button
+              variant="ghost"
+              size="icon"
+              class="size-8"
+              onclick={deleteSelection}
+              disabled={!selection || !!selectionGesture}
+              aria-label="Delete selection"
+              title="Delete selection"><Trash class="h-4 w-4" /></Button
+            >
+          </div>
+          <p class="px-1 text-xs text-muted-foreground" role="status">
+            {selectionStatus ||
+              (selectionCount
+                ? `${selectionCount} selected · drag to move`
+                : selectionMode === "box"
+                  ? "Drag a box around figures"
+                  : "Draw a loop around figures")}
+          </p>
+        </div>
+      {/if}
     </div>
     <div class="relative">
       <button
