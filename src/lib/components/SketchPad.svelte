@@ -1175,6 +1175,32 @@
     toolsOpen = !toolsOpen;
   }
 
+  function anchorPanel(panel: HTMLElement) {
+    const anchor = panel.parentElement!;
+    const toolbar = anchor.closest('[role="toolbar"]')!;
+    const gap = 8;
+    function place() {
+      const rect = anchor.getBoundingClientRect();
+      const top = toolbar.getBoundingClientRect().top;
+      const width = panel.offsetWidth;
+      const left = Math.max(gap, Math.min(rect.left + (rect.width - width) / 2, window.innerWidth - width - gap));
+      panel.style.left = `${left - rect.left}px`;
+      panel.style.bottom = `${rect.bottom - top + gap}px`;
+      panel.style.maxHeight = `${Math.max(0, top - gap * 2)}px`;
+    }
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(panel);
+    observer.observe(toolbar);
+    window.addEventListener("resize", place);
+    return {
+      destroy() {
+        observer.disconnect();
+        window.removeEventListener("resize", place);
+      }
+    };
+  }
+
   function submitSketchAnswer() {
     if (!onanswersubmit || !canSubmitSketch || sketchAnswer === null) return;
     onanswersubmit(sketchAnswer);
@@ -2109,7 +2135,8 @@
         </button>
         {#if viewOpen}
           <div
-            class="absolute bottom-10 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-xl border border-border bg-card p-2 shadow"
+            use:anchorPanel
+            class="sketch-panel flex items-center gap-1.5 rounded-xl border border-border bg-card p-2 shadow"
             role="group"
             aria-label="View options"
           >
@@ -2203,7 +2230,8 @@
       ></button>
       {#if colorOpen}
         <div
-          class="absolute bottom-10 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-xl border border-border bg-card p-2"
+          use:anchorPanel
+          class="sketch-panel flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card p-2 shadow"
           role="group"
           aria-label="Choose pen colour"
         >
@@ -2301,11 +2329,12 @@
       </Button>
       {#if shapesOpen}
         <div
-          class="absolute bottom-10 left-1/2 z-20 flex -translate-x-1/2 flex-col gap-1 rounded-xl border border-border bg-card p-2 shadow"
+          use:anchorPanel
+          class="sketch-panel flex flex-col gap-1 rounded-xl border border-border bg-card p-2 shadow"
           role="group"
           aria-label="Shape tools"
         >
-          <div class="flex items-center gap-1.5">
+          <div class="flex flex-wrap items-center gap-1.5">
             <Button
               variant={regularShapes ? "default" : "ghost"}
               size="icon"
@@ -2479,14 +2508,15 @@
       </Button>
       {#if toolsOpen}
         <div
-          class="fixed bottom-24 left-1/2 z-30 max-h-[70vh] w-72 max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow"
-          role="menu"
+          use:anchorPanel
+          class="sketch-panel rounded-xl border border-border bg-card p-1.5 shadow"
+          style:width="18rem"
+          role="group"
           aria-label="Construction tools"
         >
           <button
             type="button"
             class="flex w-full items-start gap-2 rounded-[3px] px-2 py-2 text-left transition-colors hover:bg-muted"
-            role="menuitem"
             onclick={() => startConstruction("circumcircle")}
           >
             <Compass class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -2498,7 +2528,6 @@
           <button
             type="button"
             class="flex w-full items-start gap-2 rounded-[3px] px-2 py-2 text-left transition-colors hover:bg-muted"
-            role="menuitem"
             onclick={() => startConstruction("incircle")}
           >
             <CircleDot class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -2510,7 +2539,6 @@
           <button
             type="button"
             class="flex w-full items-start gap-2 rounded-[3px] px-2 py-2 text-left transition-colors hover:bg-muted"
-            role="menuitem"
             onclick={() => startConstruction("bisector")}
           >
             <Ruler class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -2522,7 +2550,6 @@
           <button
             type="button"
             class="flex w-full items-start gap-2 rounded-[3px] px-2 py-2 text-left transition-colors hover:bg-muted"
-            role="menuitem"
             onclick={() => startConstruction("slide-line")}
           >
             <Move class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -2565,6 +2592,14 @@
 </div>
 
 <style>
+  .sketch-panel {
+    position: absolute;
+    z-index: 20;
+    width: max-content;
+    max-width: calc(100vw - 16px);
+    overflow-y: auto;
+  }
+
   .sketch-grid {
     background-image: radial-gradient(circle, rgb(0 0 0 / 0.14) 1px, transparent 1px);
     background-size: 20px 20px;
