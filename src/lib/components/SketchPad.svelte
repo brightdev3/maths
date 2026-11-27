@@ -10,6 +10,7 @@
   import Trash from "@lucide/svelte/icons/trash";
   import Type from "@lucide/svelte/icons/type";
   import Pen from "@lucide/svelte/icons/pen";
+  import WandSparkles from "@lucide/svelte/icons/wand-sparkles";
   import Undo from "@lucide/svelte/icons/undo";
   import Redo from "@lucide/svelte/icons/redo";
   import MousePointer2 from "@lucide/svelte/icons/mouse-pointer-2";
@@ -78,7 +79,7 @@
     points?: Point[];
   };
   type ShapeHandle = "start" | "end" | "nw" | "ne" | "sw" | "se" | "center" | "radius" | `vertex-${number}`;
-  type Tool = "pen" | "eraser" | "text" | "interact" | "shape" | "move";
+  type Tool = "pen" | "temporary-pen" | "eraser" | "text" | "interact" | "shape" | "move";
   type ViewMode = "blank" | "overlay" | "grid" | "question";
   type ConstructionTool = "circumcircle" | "incircle" | "bisector" | "slide-line" | null;
 
@@ -88,6 +89,8 @@
   const BORDER_TOL = 7;
   const HANDLE_R = 14;
   const SNAP_DIST = 14;
+  const TEMP_INK_HOLD_MS = 1200;
+  const TEMP_INK_FADE_MS = 900;
 
   let canvas: HTMLCanvasElement | null = $state(null);
   // Finished strokes are immutable, so redraws and undo snapshots can reuse them.
@@ -164,7 +167,14 @@
     if (historyIndex < history.length - 1) restoreScene(historyIndex + 1);
   }
 
-  let currentStroke: { pointerId: number; stroke: Stroke & { points: Point[] }; needsMovement: boolean } | null = null;
+  let currentStroke: {
+    pointerId: number;
+    stroke: Stroke & { points: Point[] };
+    needsMovement: boolean;
+    temporary: boolean;
+  } | null = null;
+  let temporaryStrokes: { stroke: Stroke; fadeAt: number }[] = [];
+  let temporaryTimer: ReturnType<typeof setTimeout> | undefined;
   let strokeFrame: number | null = null;
   let tool = $state<Tool>("pen");
   let shapeKind: ShapeKind = $state("line");
@@ -201,6 +211,7 @@
     return () => {
       observer.disconnect();
       cancelStrokeRedraw();
+      clearTimeout(temporaryTimer);
     };
   });
   let lineWidth = $state(4);
@@ -417,6 +428,30 @@
     }
   }
 
+  function drawTemporaryInk(ctx: CanvasRenderingContext2D) {
+    clearTimeout(temporaryTimer);
+    ctx.save();
+    const now = performance.now();
+    temporaryStrokes = temporaryStrokes.filter(({ fadeAt }) => now < fadeAt + TEMP_INK_FADE_MS);
+    for (const { stroke, fadeAt } of temporaryStrokes) {
+      ctx.globalAlpha = Math.min(1, (fadeAt + TEMP_INK_FADE_MS - now) / TEMP_INK_FADE_MS);
+      ctx.setLineDash([stroke.width * 0.35, stroke.width * 1.85]);
+      drawStroke(ctx, stroke);
+    }
+    const first = temporaryStrokes[0];
+    if (first) {
+      if (first.fadeAt <= now) scheduleStrokeRedraw();
+      else temporaryTimer = setTimeout(redraw, first.fadeAt - now);
+    }
+    if (currentStroke?.temporary && (!currentStroke.needsMovement || currentStroke.stroke.points.length > 1)) {
+      const { stroke } = currentStroke;
+      ctx.globalAlpha = 1;
+      ctx.setLineDash([stroke.width * 0.35, stroke.width * 1.85]);
+      drawStroke(ctx, stroke);
+    }
+    ctx.restore();
+  }
+
   function scheduleStrokeRedraw() {
     if (strokeFrame !== null) return;
     strokeFrame = requestAnimationFrame(() => {
@@ -443,7 +478,11 @@
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     for (const stroke of strokes) drawStroke(ctx, stroke);
-    if (currentStroke && (!currentStroke.needsMovement || currentStroke.stroke.points.length > 1)) {
+    if (
+      currentStroke &&
+      !currentStroke.temporary &&
+      (!currentStroke.needsMovement || currentStroke.stroke.points.length > 1)
+    ) {
       drawStroke(ctx, currentStroke.stroke);
     }
     for (const shape of shapes) drawShape(ctx, shape);
@@ -456,6 +495,7 @@
       const lh = box.fontSize * 1.25;
       lines.forEach((line, i) => ctx.fillText(line, box.x + PAD, box.y + PAD + i * lh));
     }
+    if (temporaryStrokes.length || currentStroke?.temporary) drawTemporaryInk(ctx);
     ctx.restore();
   }
 
@@ -475,8 +515,10 @@
       untrack(() => {
         finishStroke();
         finishErasing();
+        temporaryStrokes = [];
       });
       cancelStrokeRedraw();
+      clearTimeout(temporaryTimer);
       return;
     }
     sizeCanvas();
@@ -1553,7 +1595,12 @@
     hoverShapeId = null;
     commitText();
     capturePointer(event.target, event.pointerId);
-    currentStroke = { pointerId: event.pointerId, stroke: { points: [p], color, width: lineWidth }, needsMovement };
+    currentStroke = {
+      pointerId: event.pointerId,
+      stroke: { points: [p], color, width: lineWidth },
+      needsMovement,
+      temporary: tool === "temporary-pen"
+    };
     if (!needsMovement) scheduleStrokeRedraw();
   }
 
@@ -1580,7 +1627,7 @@
         moveEraser(position(event));
       } else {
         finishErasing();
-        if (primaryDown && event.pointerType === "pen" && tool === "pen" && !construction) {
+        if (primaryDown && event.pointerType === "pen" && (tool === "pen" || tool === "temporary-pen") && !construction) {
           // Resume at this point, but don't leave a dot if the pen just lifts.
           startStroke(event, position(event), true);
         }
@@ -1836,14 +1883,18 @@
 
   function finishStroke(event?: PointerEvent) {
     if (!currentStroke) return;
-    const { stroke, needsMovement } = currentStroke;
+    const { stroke, needsMovement, temporary } = currentStroke;
     if (event?.type === "pointerup" && canvas) {
       appendStrokeSamples(stroke.points, event, canvas.getBoundingClientRect());
     }
     currentStroke = null;
     if (needsMovement && stroke.points.length === 1) return;
-    strokes = [...strokes, stroke];
-    snapshot();
+    if (temporary) {
+      temporaryStrokes.push({ stroke, fadeAt: performance.now() + TEMP_INK_HOLD_MS });
+    } else {
+      strokes = [...strokes, stroke];
+      snapshot();
+    }
     scheduleStrokeRedraw();
   }
 
@@ -1873,6 +1924,8 @@
 
   function clearCanvas() {
     currentStroke = null;
+    temporaryStrokes = [];
+    clearTimeout(temporaryTimer);
     finishErasing();
     strokes = [];
     boxes = [];
@@ -2336,6 +2389,17 @@
       title="Pen"
     >
       <Pen class="h-4 w-4" />
+    </Button>
+    <Button
+      variant={tool === "temporary-pen" ? "default" : "ghost"}
+      size="icon"
+      class="size-8"
+      onclick={() => setTool("temporary-pen")}
+      aria-label="Temporary pen"
+      aria-pressed={tool === "temporary-pen"}
+      title="Temporary pen (dotted ink fades away)"
+    >
+      <WandSparkles class="h-4 w-4" />
     </Button>
     <Button
       variant={tool === "eraser" ? "default" : "ghost"}
