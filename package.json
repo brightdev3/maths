@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "vite dev",
+    "dev": "bun --bun run vite dev",
     "build": "vite build && bun run build:legacy",
     "build:legacy": "bun run scripts/build-legacy-css.ts",
     "preview": "vite preview",
