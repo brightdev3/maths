@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { appendStrokeSamples, isPenEraser, isPenEraserContact, traceStroke, type Point } from "./sketch-stroke";
-  import { areaHit, boxCorners, insideBox, pointBounds } from "./sketch-selection";
+  import { areaHit, boxCorners, insideBox, pointBounds, type Bounds } from "./sketch-selection";
+  import { imageFiles, loadSketchImage } from "./sketch-image";
   import { Button } from "$lib/components/ui/button";
   import { renderMath } from "$lib/mathex/content";
   import NumberAnswer from "$lib/mathex/answers/NumberAnswer.svelte";
@@ -19,6 +20,7 @@
   import Lasso from "@lucide/svelte/icons/lasso";
   import Copy from "@lucide/svelte/icons/copy";
   import ClipboardPaste from "@lucide/svelte/icons/clipboard-paste";
+  import ImagePlus from "@lucide/svelte/icons/image-plus";
   import Shapes from "@lucide/svelte/icons/shapes";
   import Lock from "@lucide/svelte/icons/lock";
   import LockOpen from "@lucide/svelte/icons/lock-open";
@@ -57,6 +59,7 @@
   } = $props();
 
   type Stroke = { points: readonly Point[]; color: string; width: number };
+  type SketchImage = Bounds & { id: string; src: string; name: string };
   type TextBox = {
     id: string;
     x: number;
@@ -103,10 +106,11 @@
   const strokePaths = new WeakMap<Stroke, Path2D>();
   let boxes: TextBox[] = $state([]);
   let shapes: Shape[] = $state([]);
+  let images: SketchImage[] = $state([]);
   let nextId = 1;
 
-  type Scene = { strokes: readonly Stroke[]; boxes: TextBox[]; shapes: Shape[] };
-  let history = $state.raw<Scene[]>([{ strokes: [], boxes: [], shapes: [] }]);
+  type Scene = { strokes: readonly Stroke[]; boxes: TextBox[]; shapes: Shape[]; images: SketchImage[] };
+  let history = $state.raw<Scene[]>([{ strokes: [], boxes: [], shapes: [], images: [] }]);
   let historyIndex = $state(0);
 
   function cloneScene(scene: Scene): Scene {
@@ -116,11 +120,11 @@
       Scene,
       "boxes" | "shapes"
     >;
-    return { strokes: scene.strokes, boxes, shapes };
+    return { strokes: scene.strokes, boxes, shapes, images: scene.images.map((image) => ({ ...image })) };
   }
 
   function snapshot() {
-    history = [...history.slice(0, historyIndex + 1), cloneScene({ strokes, boxes, shapes })].slice(-50);
+    history = [...history.slice(0, historyIndex + 1), cloneScene({ strokes, boxes, shapes, images })].slice(-50);
     historyIndex = history.length - 1;
   }
 
@@ -132,6 +136,7 @@
     strokes = copy.strokes;
     boxes = copy.boxes;
     shapes = copy.shapes;
+    images = copy.images;
     clearSelection();
     selectedId = null;
     hoverId = null;
@@ -188,9 +193,14 @@
   let sketchClipboard = $state.raw<Scene | null>(null);
   let pasteOffset = 0;
   let selectionStatus = $state("");
+  let imageInput: HTMLInputElement;
+  let imageStatus = $state("");
+  let imageImportQueue = Promise.resolve();
+  let imageImportGeneration = 0;
   let selectionGesture = $state.raw<
     | { kind: "area"; pointerId: number; points: Point[] }
     | { kind: "move"; pointerId: number; start: Point; end: Point }
+    | { kind: "resize-image"; pointerId: number; image: SketchImage; start: Point; scale: number }
     | null
   >(null);
   let shapeKind: ShapeKind = $state("line");
@@ -228,6 +238,7 @@
       observer.disconnect();
       cancelStrokeRedraw();
       clearTimeout(temporaryTimer);
+      imageImportGeneration++;
     };
   });
   let lineWidth = $state(4);
@@ -287,8 +298,11 @@
   const canUndo = $derived(constructionPoints.length > 0 || historyIndex > 0);
   const canRedo = $derived(constructionRedo.length > 0 || historyIndex < history.length - 1);
   const selectionCount = $derived(
-    selection ? selection.strokes.length + selection.boxes.length + selection.shapes.length : 0
+    selection
+      ? selection.strokes.length + selection.boxes.length + selection.shapes.length + selection.images.length
+      : 0
   );
+  const selectedImage = $derived(selectionCount === 1 ? (selection?.images[0] ?? null) : null);
   const selectionBounds = $derived(selection ? sceneBounds(selection) : null);
   const selectionArea = $derived(selectionGesture?.kind === "area" ? areaPoints(selectionGesture.points) : null);
   const selectionOffset = $derived(
@@ -563,6 +577,8 @@
         finishStroke();
         finishErasing();
         clearSelection();
+        imageImportGeneration++;
+        imageStatus = "";
         temporaryStrokes = [];
       });
       cancelStrokeRedraw();
@@ -580,7 +596,7 @@
     if (open) untrack(redraw);
   });
 
-  function position(event: PointerEvent): Point {
+  function position(event: Pick<MouseEvent, "clientX" | "clientY">): Point {
     const rect = canvas!.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
@@ -663,7 +679,8 @@
     const bounds = [
       ...scene.strokes.map((stroke) => pointBounds(stroke.points, stroke.width / 2)),
       ...scene.shapes.map((shape) => pointBounds(shapePath(shape), shape.width / 2)),
-      ...scene.boxes
+      ...scene.boxes,
+      ...scene.images
     ];
     return bounds.length ? pointBounds(bounds.flatMap(boxCorners)) : null;
   }
@@ -672,18 +689,27 @@
     return selectionMode === "box" ? boxCorners(pointBounds(points)) : points;
   }
 
+  function areaHitsBox(area: Point[], box: Bounds) {
+    const corners = boxCorners(box);
+    return area.some((point) => insideBox(point, box)) || areaHit(area, [...corners, corners[0]]);
+  }
+
   function selectArea(area: Point[]) {
     const bounds = pointBounds(area);
-    if (area.length < 3 || bounds.w < 3 || bounds.h < 3) return;
+    if (area.length < 3 || bounds.w < 3 || bounds.h < 3) {
+      if (Math.max(bounds.w, bounds.h) < 4) {
+        const hit = images.findLast((image) => insideBox(area[0], image));
+        if (hit) selectImages([hit]);
+      }
+      return;
+    }
     const next: Scene = {
       strokes: strokes.filter((stroke) => areaHit(area, stroke.points)),
       shapes: shapes.filter((shape) => areaHit(area, shapePath(shape))),
-      boxes: boxes.filter((box) => {
-        const corners = boxCorners(box);
-        return area.some((point) => insideBox(point, box)) || areaHit(area, [...corners, corners[0]]);
-      })
+      boxes: boxes.filter((box) => areaHitsBox(area, box)),
+      images: images.filter((image) => areaHitsBox(area, image))
     };
-    selection = next.strokes.length || next.shapes.length || next.boxes.length ? next : null;
+    selection = next.strokes.length || next.shapes.length || next.boxes.length || next.images.length ? next : null;
     if (!selection) selectionStatus = "No figures in that area.";
   }
 
@@ -698,7 +724,12 @@
   function startSelection(event: PointerEvent, p: Point) {
     capturePointer(event.target, event.pointerId);
     selectionStatus = "";
-    if (selectionBounds && insideBox(p, selectionBounds, 6)) {
+    if (
+      selectedImage &&
+      Math.hypot(p.x - selectedImage.x - selectedImage.w, p.y - selectedImage.y - selectedImage.h) <= HANDLE_R
+    ) {
+      selectionGesture = { kind: "resize-image", pointerId: event.pointerId, image: selectedImage, start: p, scale: 1 };
+    } else if (selectionBounds && insideBox(p, selectionBounds, 6)) {
       selectionGesture = { kind: "move", pointerId: event.pointerId, start: p, end: p };
     } else {
       selection = null;
@@ -712,6 +743,10 @@
     if (gesture.kind === "move") {
       selectionGesture = { ...gesture, end: p };
       scheduleStrokeRedraw();
+    } else if (gesture.kind === "resize-image") {
+      const { w, h } = gesture.image;
+      const projection = ((p.x - gesture.start.x) * w + (p.y - gesture.start.y) * h) / (w * w + h * h);
+      selectionGesture = { ...gesture, scale: Math.max(Math.min(1, 16 / Math.max(w, h)), 1 + projection) };
     } else if (selectionMode === "box") {
       selectionGesture = { ...gesture, points: [gesture.points[0], p] };
     } else {
@@ -741,7 +776,7 @@
       return next;
     });
     for (const shape of selection.shapes) translateShape(shape, dx, dy);
-    for (const box of selection.boxes) {
+    for (const box of [...selection.boxes, ...selection.images]) {
       box.x += dx;
       box.y += dy;
     }
@@ -761,6 +796,12 @@
       redraw();
     } else if (gesture.kind === "area") {
       selectArea(areaPoints(gesture.points));
+    } else if (gesture.kind === "resize-image") {
+      if (gesture.scale !== 1) {
+        gesture.image.w *= gesture.scale;
+        gesture.image.h *= gesture.scale;
+        snapshot();
+      }
     } else {
       translateSelection(x, y);
     }
@@ -792,14 +833,21 @@
       shape.id = nextShapeId();
       translateShape(shape, dx, dy);
     }
+    for (const image of pasted.images) {
+      image.id = `img-${nextId++}`;
+      image.x += dx;
+      image.y += dy;
+    }
     strokes = [...strokes, ...pasted.strokes];
     shapes.push(...pasted.shapes);
     boxes.push(...pasted.boxes);
+    images.push(...pasted.images);
     // Read back the reactive objects rather than retaining their plain inputs.
     selection = {
       strokes: pasted.strokes,
       boxes: boxes.slice(boxes.length - pasted.boxes.length),
-      shapes: shapes.slice(shapes.length - pasted.shapes.length)
+      shapes: shapes.slice(shapes.length - pasted.shapes.length),
+      images: images.slice(images.length - pasted.images.length)
     };
     snapshot();
     redraw();
@@ -810,12 +858,81 @@
     const ink = new Set(selection.strokes);
     const text = new Set(selection.boxes);
     const figures = new Set(selection.shapes);
+    const pictures = new Set(selection.images);
     strokes = strokes.filter((stroke) => !ink.has(stroke));
     boxes = boxes.filter((box) => !text.has(box));
     shapes = shapes.filter((shape) => !figures.has(shape));
+    images = images.filter((image) => !pictures.has(image));
     clearSelection();
     snapshot();
     redraw();
+  }
+
+  function selectImages(pictures: SketchImage[]) {
+    selection = { strokes: [], shapes: [], boxes: [], images: pictures };
+  }
+
+  function insertImages(files: File[], point?: Point) {
+    const generation = imageImportGeneration;
+    // Apply imports in the order they were requested, regardless of decode time.
+    imageImportQueue = imageImportQueue.then(async () => {
+      if (generation !== imageImportGeneration) return;
+      imageStatus = "Loading images…";
+      const results = await Promise.allSettled(files.map(loadSketchImage));
+      if (generation !== imageImportGeneration || !open || !canvas) return;
+      const pictures: SketchImage[] = [];
+      const { clientWidth, clientHeight } = canvas;
+      for (const result of results) {
+        if (result.status !== "fulfilled") continue;
+        const image = result.value;
+        const scale = Math.min(1, (clientWidth * 0.65) / image.w, (clientHeight * 0.65) / image.h);
+        const w = image.w * scale;
+        const h = image.h * scale;
+        const offset = pictures.length * 20;
+        const x = (point?.x ?? clientWidth / 2) - w / 2 + offset;
+        const y = (point?.y ?? clientHeight / 2) - h / 2 + offset;
+        pictures.push({
+          ...image,
+          id: `img-${nextId++}`,
+          x: Math.max(0, Math.min(x, clientWidth - w)),
+          y: Math.max(0, Math.min(y, clientHeight - h)),
+          w,
+          h
+        });
+      }
+      const failed = results.find((result) => result.status === "rejected");
+      imageStatus = failed?.reason instanceof Error ? failed.reason.message : failed ? "Couldn't open the image." : "";
+      if (!pictures.length) return;
+      onUp();
+      chooseSelection(selectionMode);
+      images.push(...pictures);
+      selectImages(images.slice(-pictures.length));
+      snapshot();
+      canvas.focus({ preventScroll: true });
+    });
+  }
+
+  function chooseImageFiles(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const files = imageFiles(input.files);
+    if (files.length) insertImages(files);
+    else if (input.files?.length) imageStatus = "Choose a raster image or an SVG.";
+    input.value = "";
+  }
+
+  function onDragOver(event: DragEvent) {
+    if (event.dataTransfer?.types.includes("Files")) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    }
+  }
+
+  function onDrop(event: DragEvent) {
+    if (!event.dataTransfer?.files.length) return;
+    event.preventDefault();
+    const files = imageFiles(event.dataTransfer.files);
+    if (files.length) insertImages(files, position(event));
+    else imageStatus = "Choose a raster image or an SVG.";
   }
 
   function shapeHit(shape: Shape, p: Point, tol = 6) {
@@ -1786,6 +1903,7 @@
     const penErasing = isPenEraser(event);
     if (!penErasing && event.button !== 0) return;
     canvas.focus({ preventScroll: true });
+    imageStatus = "";
     colorOpen = false;
     shapesOpen = false;
     viewOpen = false;
@@ -2114,9 +2232,6 @@
         event.preventDefault();
         if (key === "y" || event.shiftKey) redo();
         else undo();
-      } else if (key === "c" && selection && !selectionGesture) {
-        event.preventDefault();
-        copySelection();
       }
       return;
     }
@@ -2131,9 +2246,21 @@
     }
   }
 
+  function onCopy(event: ClipboardEvent) {
+    if (!open || pageInteraction || event.defaultPrevented || isEditable(event) || !selection || selectionGesture)
+      return;
+    copySelection();
+    event.clipboardData?.setData("text/plain", "Sketchpad selection");
+    event.preventDefault();
+  }
+
   function onPaste(event: ClipboardEvent) {
     if (!open || pageInteraction || event.defaultPrevented || isEditable(event)) return;
-    if (sketchClipboard && !selectionGesture) {
+    const files = imageFiles(event.clipboardData?.files);
+    if (files.length) {
+      event.preventDefault();
+      insertImages(files);
+    } else if (sketchClipboard && !selectionGesture) {
       event.preventDefault();
       pasteSelection();
     }
@@ -2213,6 +2340,9 @@
     strokes = [];
     boxes = [];
     shapes = [];
+    images = [];
+    imageImportGeneration++;
+    imageStatus = "";
     clearSelection();
     selectedId = null;
     hoverId = null;
@@ -2225,7 +2355,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onShortcut} onpaste={onPaste} />
+<svelte:window onkeydown={onShortcut} oncopy={onCopy} onpaste={onPaste} />
 
 <div
   class="fixed inset-0 z-50 flex flex-col {open ? '' : 'hidden'} {pageInteraction ? 'pointer-events-none' : ''}"
@@ -2277,6 +2407,23 @@
     </div>
   {/if}
   <div class="relative min-h-0 flex-1">
+    <div class="pointer-events-none absolute inset-0 overflow-hidden">
+      {#each images as image (image.id)}
+        {@const moving = selection?.images.includes(image) ? selectionOffset : { x: 0, y: 0 }}
+        {@const scale =
+          selectionGesture?.kind === "resize-image" && selectionGesture.image === image ? selectionGesture.scale : 1}
+        <img
+          src={image.src}
+          alt={image.name}
+          draggable="false"
+          class="absolute h-auto max-w-none select-none"
+          style:left="{image.x + moving.x}px"
+          style:top="{image.y + moving.y}px"
+          style:width="{image.w * scale}px"
+          style:height="{image.h * scale}px"
+        />
+      {/each}
+    </div>
     <canvas
       bind:this={canvas}
       tabindex={-1}
@@ -2288,6 +2435,8 @@
         : ''}"
       onpointerdown={onDown}
       onpointermove={onMove}
+      ondragover={onDragOver}
+      ondrop={onDrop}
       onpointerup={onUp}
       onpointercancel={onUp}
       onlostpointercapture={onUp}
@@ -2314,14 +2463,22 @@
       </svg>
     {/if}
     {#if selectionBounds}
+      {@const scale = selectionGesture?.kind === "resize-image" ? selectionGesture.scale : 1}
       <div
         class="pointer-events-none absolute rounded-sm border-2 border-dashed border-primary"
         style:left="{selectionBounds.x + selectionOffset.x - 4}px"
         style:top="{selectionBounds.y + selectionOffset.y - 4}px"
-        style:width="{selectionBounds.w + 8}px"
-        style:height="{selectionBounds.h + 8}px"
+        style:width="{selectionBounds.w * scale + 8}px"
+        style:height="{selectionBounds.h * scale + 8}px"
         aria-hidden="true"
-      ></div>
+      >
+        {#if selectedImage}
+          <div
+            class="absolute bottom-0.5 right-0.5 size-3 translate-x-1/2 translate-y-1/2 rounded-full border-2 border-primary bg-card shadow"
+            title="Drag to resize image"
+          ></div>
+        {/if}
+      </div>
     {/if}
     {#if construction && construction !== "slide-line"}
       {#each constructionPoints as point, index (index)}
@@ -2502,6 +2659,14 @@
           Cancel
         </button>
       </div>
+    {/if}
+    {#if imageStatus}
+      <p
+        class="pointer-events-none absolute inset-x-4 top-4 z-20 mx-auto w-fit rounded-md border border-border bg-card px-3 py-2 text-sm shadow"
+        role="status"
+      >
+        {imageStatus}
+      </p>
     {/if}
   </div>
   <div
@@ -2815,6 +2980,17 @@
       title="Text"
     >
       <Type class="h-4 w-4" />
+    </Button>
+    <input bind:this={imageInput} type="file" accept="image/*,.svg" multiple hidden onchange={chooseImageFiles} />
+    <Button
+      variant="ghost"
+      size="icon"
+      class="size-8"
+      onclick={() => imageInput.click()}
+      aria-label="Insert images"
+      title="Insert images (including SVG). You can also paste or drop an image."
+    >
+      <ImagePlus class="h-4 w-4" />
     </Button>
     <div class="relative">
       <Button
