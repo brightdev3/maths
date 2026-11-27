@@ -141,11 +141,26 @@
 
   function undo() {
     finishErasing();
+    const point = constructionPoints.at(-1);
+    if (point) {
+      constructionPoints = constructionPoints.slice(0, -1);
+      constructionRedo = [...constructionRedo, point];
+      constructionError = "";
+      snapPreview = null;
+      return;
+    }
     if (historyIndex > 0) restoreScene(historyIndex - 1);
   }
 
   function redo() {
     finishErasing();
+    const point = constructionRedo.at(-1);
+    if (point) {
+      constructionRedo = constructionRedo.slice(0, -1);
+      constructionPoints = [...constructionPoints, point];
+      snapPreview = null;
+      return;
+    }
     if (historyIndex < history.length - 1) restoreScene(historyIndex + 1);
   }
 
@@ -159,6 +174,8 @@
   let toolsOpen = $state(false);
   let construction: ConstructionTool = $state(null);
   let constructionPoints = $state<Point[]>([]);
+  let constructionRedo = $state<Point[]>([]);
+  let constructionError = $state("");
   let snapPreview: Point | null = $state(null);
   let snapEnabled = $state(true);
   let view = $state<ViewMode>("blank");
@@ -240,6 +257,8 @@
   const canShowQuestion = $derived(mode === "mathex" && question.trim() !== "" && !!answerType && !!onanswersubmit);
   const pageInteraction = $derived(mode === "mathex" && tool === "interact" && view === "overlay" && !construction);
   const canSubmitSketch = $derived(sketchAnswer !== null && sketchAnswer !== "");
+  const canUndo = $derived(constructionPoints.length > 0 || historyIndex > 0);
+  const canRedo = $derived(constructionRedo.length > 0 || historyIndex < history.length - 1);
 
   $effect(() => {
     question;
@@ -810,7 +829,6 @@
   }
 
   function addCircleShape(circle: CircleGeometry) {
-    if (circle.radius < 1) return;
     shapes.push({
       id: nextShapeId(),
       kind: "circle",
@@ -841,13 +859,13 @@
     let added = false;
     if (construction === "circumcircle" && points.length === 3) {
       const circle = circumcircle(points[0], points[1], points[2]);
-      if (circle) {
+      if (circle && circle.radius >= 1) {
         addCircleShape(circle);
         added = true;
       }
     } else if (construction === "incircle" && points.length === 3) {
       const circle = incircle(points[0], points[1], points[2]);
-      if (circle) {
+      if (circle && circle.radius >= 1) {
         addCircleShape(circle);
         added = true;
       }
@@ -858,17 +876,20 @@
         added = true;
       }
     }
-    construction = null;
-    constructionPoints = [];
-    snapPreview = null;
-    if (added) {
-      snapshot();
-      redraw();
+    if (!added) {
+      constructionPoints = points.slice(0, -1);
+      constructionError = "Those points don't make a valid construction. Try a different point.";
+      return;
     }
+    cancelConstruction();
+    snapshot();
+    redraw();
   }
 
   function pickConstructionPoint(p: Point) {
     constructionPoints = [...constructionPoints, snapPoint(p)];
+    constructionRedo = [];
+    constructionError = "";
     snapPreview = null;
     if (constructionPoints.length >= 3) completeConstruction();
   }
@@ -1146,6 +1167,8 @@
   function cancelConstruction() {
     construction = null;
     constructionPoints = [];
+    constructionRedo = [];
+    constructionError = "";
     snapPreview = null;
     lineSlideDrag = null;
     lineEndpointDrag = null;
@@ -1160,10 +1183,7 @@
     hoverId = null;
     hoverShapeId = null;
     selectedId = null;
-    constructionPoints = [];
-    lineSlideDrag = null;
-    lineEndpointDrag = null;
-    snapPreview = null;
+    cancelConstruction();
     construction = next;
   }
 
@@ -1770,14 +1790,28 @@
     }
   });
 
-  $effect(() => {
-    if (!construction) return;
-    const cancel = (event: KeyboardEvent) => {
-      if (event.key === "Escape") cancelConstruction();
-    };
-    window.addEventListener("keydown", cancel);
-    return () => window.removeEventListener("keydown", cancel);
-  });
+  function isEditable(event: Event) {
+    return event.composedPath().some(
+      (target) =>
+        target instanceof HTMLElement &&
+        (target.isContentEditable || target.matches("input, textarea, select, math-field"))
+    );
+  }
+
+  function onShortcut(event: KeyboardEvent) {
+    if (!open || event.defaultPrevented || event.isComposing || isEditable(event)) return;
+    if (event.key === "Escape" && construction) {
+      cancelConstruction();
+      return;
+    }
+    if (pageInteraction || (!(event.ctrlKey || event.metaKey)) || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (key === "z" || key === "y") {
+      event.preventDefault();
+      if (key === "y" || event.shiftKey) redo();
+      else undo();
+    }
+  }
 
   function finishShape(id: string) {
     const shape = shapes.find((s) => s.id === id);
@@ -1853,6 +1887,8 @@
     redraw();
   }
 </script>
+
+<svelte:window onkeydown={onShortcut} />
 
 <div
   class="fixed inset-0 z-50 flex flex-col {open ? '' : 'hidden'} {pageInteraction ? 'pointer-events-none' : ''}"
@@ -2083,7 +2119,16 @@
         class="pointer-events-auto absolute bottom-20 left-1/2 z-20 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs shadow"
         role="status"
       >
-        <span>{constructionPrompt()}</span>
+        <span>{constructionError || constructionPrompt()}</span>
+        {#if constructionPoints.length}
+          <button
+            type="button"
+            class="shrink-0 rounded-[3px] px-1.5 py-0.5 font-medium text-primary transition-colors hover:bg-muted"
+            onclick={undo}
+          >
+            Undo point
+          </button>
+        {/if}
         <button
           type="button"
           class="shrink-0 rounded-[3px] px-1.5 py-0.5 font-medium text-primary transition-colors hover:bg-muted"
@@ -2196,9 +2241,9 @@
         type="button"
         class="flex h-8 w-8 items-center justify-center rounded-full transition-colors text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
         onclick={undo}
-        disabled={historyIndex <= 0}
-        aria-label="Undo"
-        title="Undo"
+        disabled={!canUndo}
+        aria-label={constructionPoints.length ? "Undo point" : "Undo"}
+        title="Undo (Ctrl/⌘+Z)"
       >
         <Undo class="h-4 w-4" />
       </button>
@@ -2206,9 +2251,9 @@
         type="button"
         class="flex h-8 w-8 items-center justify-center rounded-full transition-colors text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
         onclick={redo}
-        disabled={historyIndex >= history.length - 1}
-        aria-label="Redo"
-        title="Redo"
+        disabled={!canRedo}
+        aria-label={constructionRedo.length ? "Redo point" : "Redo"}
+        title="Redo (Ctrl/⌘+Shift+Z)"
       >
         <Redo class="h-4 w-4" />
       </button>
